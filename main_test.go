@@ -79,8 +79,8 @@ func TestBackward(t *testing.T){
 	y:=f(x)
 	printDense("yd",y.Data)
 	y.Backward(true)
-	printDense("xg",x.Grad)
-	if !mat.EqualApprox(x.Grad, nd,1e-4){
-		t.Errorf("Square error\n xg:\n%s dg:\n%s ",sprintDense(x.Grad),sprintDense(nd))
+	printDense("xg",x.Grad.Data)
+	if !mat.EqualApprox(x.Grad.Data, nd,1e-4){
+		t.Errorf("Square error\n xg:\n%s dg:\n%s ",sprintDense(x.Grad.Data),sprintDense(nd))
 	}
 }

@@ -25,7 +25,7 @@ func v2d(ix []*Variable)[]*mat.Dense{
 func v2g(ix []*Variable)[]*mat.Dense{
 	var idx []*mat.Dense
 	for _,x:=range ix{
-		idx=append(idx,x.Grad)
+		idx=append(idx,x.Grad.Data)
 	}
 	return idx
 }
@@ -41,15 +41,16 @@ func d2v(id []*mat.Dense)[]*Variable{
 func g2v(id []*mat.Dense)[]*Variable{
 	var ivx []*Variable
 	for _,d:=range id{
-		v:=&Variable{Grad:d}
+		v:=&Variable{Grad:&Variable{Data: d}}
 		ivx=append(ivx,v)
 	}
 	return ivx
 }
 
 type Variable struct{
+	Name string
 	Data *mat.Dense
-	Grad *mat.Dense
+	Grad *Variable
 	Creator *Function
 	Level int
 }
@@ -63,21 +64,24 @@ func (v *Variable) SetCreator(f*Function)  {
 }
 func (v *Variable) Backward(retainGrad bool) {
 	if v.Grad==nil{
-		v.Grad=LikeOnes(v.Data)
+		v.Grad=&Variable{Data: LikeOnes(v.Data)}
 	}
 	seen:=make(map[*Function]bool)
 	stack:=[]*Function{v.Creator}
 	for len(stack)>0 {
 		f:=stack[len(stack)-1]
 		stack=stack[:len(stack)-1]//pop
-		y:=f.outputs
-		gys:=f.Back(y...)
+		var gys []*Variable
+		for _,output:=range f.outputs{
+			gys =append(gys,output.Grad)
+		}
+		gxs :=f.Back(gys...)
 		//这里如果有两个输入，则两个输入都会加入func列表
 		for xi,x:=range f.inputs{
 			if x.Grad==nil{
-				x.Grad=gys[xi].Grad
+				x.Grad= gxs[xi]
 			}else{
-				x.Grad.Add(x.Grad,gys[xi].Grad)
+				x.Grad=add(x.Grad, gxs[xi])
 			}
 			if x.Creator!=nil && !seen[x.Creator]{
 				seen[x.Creator]=true
@@ -101,7 +105,7 @@ func NewFunction(f IFunc) Function {
 
 type IFunc interface {
 	forward(i []*mat.Dense) []*mat.Dense
-	backward(i,dy []*mat.Dense) []*mat.Dense
+	backward(i,dy []*Variable) []*Variable
 }
 
 type Function struct{
@@ -144,11 +148,8 @@ func (f *Function) Run(ix ...*Variable) *Variable{
 }
 
 func (f *Function) Back(ig ...*Variable) []*Variable{
-	idx:=v2d(f.inputs)
-	igx:=v2g(ig)
-	b:=f.iFunc.backward(idx,igx)
-	os:=g2v(b)
-	return os
+	b:=f.iFunc.backward(f.inputs,ig)
+	return b
 }
 
 func pow(x *Variable,c int)*Variable{
@@ -165,14 +166,14 @@ func (s *Pow) forward(i []*mat.Dense) []*mat.Dense  {
 	return []*mat.Dense{&o}
 }
 
-func (s *Pow) backward(i,dy []*mat.Dense) []*mat.Dense  {
+func (s *Pow) backward(i,dy []*Variable) []*Variable  {
 	mul2:=func(_,_ int,v float64) float64{return v*float64(s.C)}
 	x:=i[0]
-	o:=mat.Dense{}
-	o.Pow(x,s.C-1)
-	o.MulElem(&o,dy[0]) //todo 维度问题
-	o.Apply(mul2,&o)
-	return []*mat.Dense{&o}
+	o:=mul(pow(x,s.C-1),dy[0])
+	//o.Apply(mul2,&o)
+	//todo Apply这种如何处理，需要后续考虑,暂时原始处理，计算图断掉了！！！
+	o.Data.Apply(mul2,o.Data)
+	return []*Variable{o}
 }
 
 func exp(x ...*Variable)*Variable{
@@ -187,11 +188,10 @@ func (e *Exp)forward(i []*mat.Dense) []*mat.Dense  {
 	o.Exp(i[0])
 	return [] *mat.Dense{&o}
 }
-func (e *Exp)backward(i,dy []*mat.Dense) []*mat.Dense  {
-	o:=mat.Dense{}
-	o.Exp(i[0])
-	o.MulElem(&o,dy[0])
-	return [] *mat.Dense{&o}
+
+func (e *Exp)backward(i, gy []*Variable) []*Variable {
+	o:=mul(exp(i[0]), gy[0])
+	return [] *Variable{o}
 }
 
 func neg(x *Variable)*Variable{
@@ -206,30 +206,12 @@ func (e *Neg)forward(i []*mat.Dense) []*mat.Dense  {
 	o.Apply(negFunc,i[0])
 	return [] *mat.Dense{&o}
 }
-func (e *Neg)backward(i,dy []*mat.Dense) []*mat.Dense  {
-	o:=mat.Dense{}
-	o.Apply(negFunc,dy[0])
-	return [] *mat.Dense{&o}
+func (e *Neg)backward(i,gy []*Variable) []*Variable  {
+	ngy:=neg(gy[0])
+	return [] *Variable{ngy}
 }
 
 
-func add(x0,x1 *Variable)*Variable{
-	f:=NewFunction(&Add{})
-	y:=f.Run(x0,x1)
-	return y
-}
-type Add struct {
-	Function
-}
-func (a *Add) forward(ix []*mat.Dense) []*mat.Dense {
-	o:=mat.Dense{}
-	o.Add(ix[0],ix[1])
-	os:=[]*mat.Dense{&o}
-	return os
-}
-func (a *Add) backward(i,gy []*mat.Dense) []*mat.Dense  {
-	return []*mat.Dense{gy[0],gy[0]}
-}
 
 func sub(x0,x1 *Variable)*Variable{
 	f:=NewFunction(&Sub{})
@@ -245,10 +227,9 @@ func (a *Sub) forward(ix []*mat.Dense) []*mat.Dense {
 	os:=[]*mat.Dense{&o}
 	return os
 }
-func (a *Sub) backward(i,gy []*mat.Dense) []*mat.Dense  {
-	ng:=mat.Dense{}
-	ng.Apply(negFunc,gy[0])
-	return []*mat.Dense{gy[0],&ng}
+func (a *Sub) backward(i,gy []*Variable) []*Variable  {
+	ngy:=neg(gy[0])
+	return []*Variable{gy[0],ngy}
 }
 
 
@@ -267,19 +248,28 @@ func (d *Div) forward(ix[]*mat.Dense)[]*mat.Dense {
 	o.DivElem(ix[0],ix[1])
 	return []*mat.Dense{&o}
 }
-func (d *Div) backward(i,gy []*mat.Dense)[]*mat.Dense {
+func (d *Div) backward(i,gy []*Variable)[]*Variable {
 	x0,x1:=i[0],i[1]
-	gy0:=mat.Dense{}
-	gy0.DivElem(gy[0],x1)
-	gy1:=mat.Dense{}
-	negX0:=mat.Dense{}
-	negX0.Apply(negFunc,x0)
-	powX1:=mat.Dense{}
-	powX1.Pow(x1,2)
-	divX:=mat.Dense{}
-	divX.DivElem(&negX0,&powX1)
-	gy1.MulElem(gy[0],&divX)
-	return []*mat.Dense{&gy0,&gy1}
+	gx0 :=div(gy[0],x1)
+	gx1 :=mul(gy[0], div(neg(x0), pow(x1, 2)))
+	return []*Variable{gx0, gx1}
+}
+
+func add(x0,x1 *Variable)*Variable{
+	f:=NewFunction(&Add{})
+	y:=f.Run(x0,x1)
+	return y
+}
+type Add struct {
+	Function
+}
+func (a *Add) forward(ix []*mat.Dense) []*mat.Dense {
+	o:=mat.Dense{}
+	o.Add(ix[0],ix[1])
+	return []*mat.Dense{&o}
+}
+func (a *Add) backward(i,gy []*Variable) []*Variable  {
+	return []*Variable{gy[0],gy[0]}
 }
 
 func mul(x0,x1 *Variable)*Variable{
@@ -296,18 +286,14 @@ func (m *Mul) forward(ix[]*mat.Dense)[]*mat.Dense  {
 	o.MulElem(ix[0],ix[1])
 	return []*mat.Dense{&o}
 }
-func (m *Mul) backward(i,gy []*mat.Dense)[]*mat.Dense  {
+func (m *Mul) backward(i,gy []*Variable)[]*Variable  {
 	x0,x1:=i[0],i[1]
-	gy0:=mat.Dense{}
-	gy0.MulElem(gy[0],x1)
-	gy1:=mat.Dense{}
-	gy1.MulElem(gy[0],x0)
-	return []*mat.Dense{&gy0,&gy1}
+	return []*Variable{mul(gy[0],x1),mul(gy[0],x0)}
 }
 
 func main() {
 	m := mat.NewDense(1, 1, []float64{
-		0.5,
+		3,
 	})
 
 	//m := mat.NewDense(1, 1, []float64{
@@ -322,32 +308,44 @@ func main() {
 	//y := pow(x,2)
 	//printDense("y",y.Data) //4
 
-	////check A numdiff
+	//check A numdiff
 	//A := NewFunction(&Pow{C:2})
+	//y := A.Run(x)
+	//y.Backward(true)
+	//printDense("xg",x.Grad.Data)
 	//f := A.Run
 	//g := numericalDiff(f,x,)
-	//printDense("g",g)
+	//printDense("dg",g)
 
 	////check b numdiff
 	//A := NewFunction(&Exp{})
 	//y:=A.Run(x)
 	//y.Backward(false)
+	//printDense("xg", x.Grad.Data)
 	//f := A.Run
 	//g := numericalDiff(f,x)
-	//printDense("y",y.Data)
-	//printDense("g",g)
+	//printDense("dg",g)
 
 	com:= func (x...*Variable) *Variable {
-		a := pow(x[0],2)
+		a := mul(x[0],x[0])
 		b := exp(a)
-		y := pow(b,2)
+		y := mul(b,b)
 		return y
 	}
 	y := com(x)
-	y.Backward(true)
-	printDense("yg",x.Grad)
+
 	dy := numericalDiff(com,x)
 	printDense("dg",dy)
+
+	y.Backward(true)
+	gx:=x.Grad
+	printDense("gx",gx.Data)
+
+	x.ClearGrade()
+	gx.Backward(true)
+	gx2:=x.Grad
+	printDense("gx2",gx2.Data)
+
 
 	////多出多入测试
 	//a := pow(x,2)

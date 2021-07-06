@@ -14,7 +14,7 @@ func flatten(f [][]float64) (r, c int, d []float64) {
 	d = make([]float64, 0, r*c)
 	for _, row := range f {
 		if len(row) != c {
-			panic("bad test: ragged input")
+			panic("bad test: ragged inputs")
 		}
 		d = append(d, row...)
 	}
@@ -56,21 +56,31 @@ func TestForward(t *testing.T){
 		32.0,32.0,
 	})
 	x:=&Variable{Data: m}
-	if got:=square(x);!mat.Equal(got.Data,r){
+	if got:=pow(x,2);!mat.Equal(got.Data,r){
 		t.Errorf("Square error\n x:\n%s y:\n%s ",sprintDense(x.Data),sprintDense(got.Data))
 	}
 }
 func TestBackward(t *testing.T){
+	//m := mat.NewDense(1, 1, []float64{
+	//	2.0,
+	//})
 	m := mat.NewDense(2, 2, []float64{
 		2.0,2.0,
 		2.0,2.0,
 	})
+	f:= func (x...*Variable) *Variable {
+		y := mul(x[0],x[0])
+		return y
+	}
 	x:=&Variable{Data: m}
-	f:=NewFunction(&Square{})
-	nd :=numericalDiff(f.Run,x,0)
-	y:=square(x)
-	y.Backward()
-	if !mat.EqualApprox(y.Grad, nd,1e-4){
-		t.Errorf("Square error\n x:\n%s y:\n%s ",sprintDense(x.Data),sprintDense(y.Data))
+	//f:=NewFunction(&Pow{C:2})
+	nd :=numericalDiff(f,x)
+	printDense("dg",nd)
+	y:=f(x)
+	printDense("yd",y.Data)
+	y.Backward(true)
+	printDense("xg",x.Grad)
+	if !mat.EqualApprox(x.Grad, nd,1e-4){
+		t.Errorf("Square error\n xg:\n%s dg:\n%s ",sprintDense(x.Grad),sprintDense(nd))
 	}
 }

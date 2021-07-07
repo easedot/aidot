@@ -3,6 +3,10 @@ package main
 import "C"
 import (
 	"fmt"
+	"io/ioutil"
+	"log"
+	"os/exec"
+	"path/filepath"
 	"sort"
 
 	"gonum.org/v1/gonum/mat"
@@ -15,44 +19,18 @@ const Backprop =true
 
 var negFunc=func(_,_ int,v float64) float64{return -v}
 
-func v2d(ix []*Variable)[]*mat.Dense{
-	var idx []*mat.Dense
-	for _,x:=range ix{
-		idx=append(idx,x.Data)
-	}
-	return idx
-}
-func v2g(ix []*Variable)[]*mat.Dense{
-	var idx []*mat.Dense
-	for _,x:=range ix{
-		idx=append(idx,x.Grad.Data)
-	}
-	return idx
-}
-
-func d2v(id []*mat.Dense)[]*Variable{
-	var ivx []*Variable
-	for _,d:=range id{
-		v:=&Variable{Data:d}
-		ivx=append(ivx,v)
-	}
-	return ivx
-}
-func g2v(id []*mat.Dense)[]*Variable{
-	var ivx []*Variable
-	for _,d:=range id{
-		v:=&Variable{Grad:&Variable{Data: d}}
-		ivx=append(ivx,v)
-	}
-	return ivx
-}
-
 type Variable struct{
 	Name string
 	Data *mat.Dense
 	Grad *Variable
 	Creator *Function
 	Level int
+}
+func (v *Variable) DataType() string{
+	return fmt.Sprintf("%T",v.Data.At(0,0))
+}
+func (v *Variable) Shape() (int,int){
+	return v.Data.Dims()
 }
 
 func (v *Variable) ClearGrade()  {
@@ -104,7 +82,7 @@ func NewFunction(f IFunc) Function {
 }
 
 type IFunc interface {
-	forward(i []*mat.Dense) []*mat.Dense
+	forward(i []*Variable) []*Variable
 	backward(i,dy []*Variable) []*Variable
 }
 
@@ -127,14 +105,7 @@ func FindMaxAndMin(ivs []*Variable) (int,int){
 	return max,min
 }
 func (f *Function) Run(ix ...*Variable) *Variable{
-	idx:=v2d(ix)
-	y:=f.iFunc.forward(idx)
-
-	var outputs []*Variable
-	for _,oy:=range y{
-		o:=Variable{Data:oy}
-		outputs=append(outputs,&o)
-	}
+	outputs:=f.iFunc.forward(ix)
 	if Backprop{
 		max,_:=FindMaxAndMin(ix)
 		f.Level =max
@@ -160,10 +131,10 @@ type Pow struct {
 	Function
 	C int
 }
-func (s *Pow) forward(i []*mat.Dense) []*mat.Dense  {
+func (s *Pow) forward(i []*Variable) []*Variable  {
 	o:=mat.Dense{}
-	o.Pow(i[0],s.C)
-	return []*mat.Dense{&o}
+	o.Pow(i[0].Data,s.C)
+	return []*Variable{{Data:&o}}
 }
 
 func (s *Pow) backward(i,dy []*Variable) []*Variable  {
@@ -183,10 +154,10 @@ func exp(x ...*Variable)*Variable{
 type Exp struct {
 	Function
 }
-func (e *Exp)forward(i []*mat.Dense) []*mat.Dense  {
+func (e *Exp)forward(i []*Variable) []*Variable  {
 	o:=mat.Dense{}
-	o.Exp(i[0])
-	return [] *mat.Dense{&o}
+	o.Exp(i[0].Data)
+	return [] *Variable{{Data:&o}}
 }
 
 func (e *Exp)backward(i, gy []*Variable) []*Variable {
@@ -201,10 +172,10 @@ func neg(x *Variable)*Variable{
 type Neg struct {
 	Function
 }
-func (e *Neg)forward(i []*mat.Dense) []*mat.Dense  {
+func (e *Neg)forward(i []*Variable) []*Variable  {
 	o:=mat.Dense{}
-	o.Apply(negFunc,i[0])
-	return [] *mat.Dense{&o}
+	o.Apply(negFunc,i[0].Data)
+	return [] *Variable{{Data:&o}}
 }
 func (e *Neg)backward(i,gy []*Variable) []*Variable  {
 	ngy:=neg(gy[0])
@@ -221,11 +192,10 @@ func sub(x0,x1 *Variable)*Variable{
 type Sub struct {
 	Function
 }
-func (a *Sub) forward(ix []*mat.Dense) []*mat.Dense {
+func (a *Sub) forward(ix []*Variable) []*Variable {
 	o:=mat.Dense{}
-	o.Sub(ix[0],ix[1])
-	os:=[]*mat.Dense{&o}
-	return os
+	o.Sub(ix[0].Data,ix[1].Data)
+	return []*Variable{{Data:&o}}
 }
 func (a *Sub) backward(i,gy []*Variable) []*Variable  {
 	ngy:=neg(gy[0])
@@ -243,10 +213,10 @@ type Div struct {
 	Function
 }
 
-func (d *Div) forward(ix[]*mat.Dense)[]*mat.Dense {
+func (d *Div) forward(ix[]*Variable)[]*Variable {
 	o:=mat.Dense{}
-	o.DivElem(ix[0],ix[1])
-	return []*mat.Dense{&o}
+	o.DivElem(ix[0].Data,ix[1].Data)
+	return []*Variable{{Data:&o}}
 }
 func (d *Div) backward(i,gy []*Variable)[]*Variable {
 	x0,x1:=i[0],i[1]
@@ -263,10 +233,10 @@ func add(x0,x1 *Variable)*Variable{
 type Add struct {
 	Function
 }
-func (a *Add) forward(ix []*mat.Dense) []*mat.Dense {
+func (a *Add) forward(ix []*Variable) []*Variable {
 	o:=mat.Dense{}
-	o.Add(ix[0],ix[1])
-	return []*mat.Dense{&o}
+	o.Add(ix[0].Data,ix[1].Data)
+	return []*Variable{{Data:&o}}
 }
 func (a *Add) backward(i,gy []*Variable) []*Variable  {
 	return []*Variable{gy[0],gy[0]}
@@ -281,10 +251,10 @@ type Mul struct {
 	Function
 }
 
-func (m *Mul) forward(ix[]*mat.Dense)[]*mat.Dense  {
+func (m *Mul) forward(ix[]*Variable)[]*Variable  {
 	o:=mat.Dense{}
-	o.MulElem(ix[0],ix[1])
-	return []*mat.Dense{&o}
+	o.MulElem(ix[0].Data,ix[1].Data)
+	return []*Variable{{Data: &o}}
 }
 func (m *Mul) backward(i,gy []*Variable)[]*Variable  {
 	x0,x1:=i[0],i[1]
@@ -304,8 +274,14 @@ func main() {
 	//})
 	x := &Variable{Data:m}
 	printDense("x", x.Data)
-
-	//y := pow(x,2)
+	x.Name="x"
+	print("x:",dotVar(x,true))
+	y1 := pow(x,2)
+	y1.Name="y"
+	print("y:",dotVar(y1,true))
+	print("func:",dotFunc(y1.Creator))
+	print(getDotGraph(y1,true))
+	plotDotGraph(y1,true,"/Users/haihui/Downloads/pow.png")
 	//printDense("y",y.Data) //4
 
 	//check A numdiff
@@ -412,3 +388,75 @@ func sprintDense(x *mat.Dense) string {
 	return rst
 }
 
+func dotVar(v *Variable,verbose bool) string{
+	name:=v.Name
+	if verbose && v.Data!=nil{
+		if name!=""{
+			name+=":"
+		}
+		r,c:=v.Shape()
+		name=fmt.Sprintf("%s (%d,%d) %s",name,r,c,v.DataType())
+	}
+	dotVar:=fmt.Sprintf(" \"%p\" [label=\"%s\", color=orange,style=filled]\n",v,name)
+	return dotVar
+}
+func dotFunc(f *Function) string{
+	dotFunc:=fmt.Sprintf("\"%p\" [label=\"%T\" color=lightblue,style=filled,shape=box]\n",f,f.iFunc)
+	for _,i :=range f.inputs{
+		dotFunc+=fmt.Sprintf("\"%p\"->\"%p\"\n",i,f)
+	}
+	for _,o :=range f.outputs{
+		dotFunc+=fmt.Sprintf("\"%p\"->\"%p\"\n",f,o)
+	}
+	return dotFunc
+}
+func getDotGraph(v *Variable,verbose bool)string{
+	txt:=""
+	seen:=make(map[*Function]bool)
+	stack:=[]*Function{v.Creator}
+	txt+=dotVar(v,verbose)
+	for len(stack)>0 {
+		f := stack[len(stack)-1]
+		stack = stack[:len(stack)-1] //pop
+		txt+=dotFunc(f)
+
+		//这里如果有两个输入，则两个输入都会加入func列表
+		for _, x := range f.inputs {
+			txt+=dotVar(x,verbose)
+			if x.Creator != nil && !seen[x.Creator] {
+				seen[x.Creator] = true
+				stack = append(stack, x.Creator)
+			}
+		}
+	}
+	return fmt.Sprintf("digraph g {\n%s}\n",txt)
+}
+
+func plotDotGraph(v *Variable,verbose bool,file string){
+	content:=getDotGraph(v,verbose)
+	tmpfile, err := ioutil.TempFile("", "tmp_graph.dot")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//defer os.Remove(tmpfile.Name()) // clean up
+
+	if _, err := tmpfile.Write([]byte(content)); err != nil {
+		log.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	path, err := exec.LookPath("dot")
+	if err != nil {
+		log.Printf("'dot' not found")
+	} else {
+		log.Printf("'dot' is in '%s'\n", path)
+	}
+	log.Print(tmpfile.Name())
+	fileExt := filepath.Ext(file)
+	cmd:=fmt.Sprintf(" %s %s -T %s -o %s",path,tmpfile.Name(),fileExt[1:],file)
+	log.Printf("cmd:%s",cmd)
+	exec.Command(cmd)
+}

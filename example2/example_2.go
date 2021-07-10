@@ -15,13 +15,13 @@
 //
 //type str string
 //
-//type Variable struct{
+//type nd.Variable struct{
 //	Data *mat.Dense
 //	Grad *mat.Dense
 //}
-//func NewVariable(r,c int) *Variable{
+//func Newnd.Variable(r,c int) *nd.Variable{
 //	d := mat.NewDense(r,c,nil)
-//	o := &Variable{d,nil}
+//	o := &nd.Variable{d,nil}
 //	return o
 //}
 //type IFunc interface {
@@ -33,20 +33,20 @@
 //}
 //type Function struct{
 //	iFunc       IFunc
-//	input,ouput *Variable
+//	input,ouput *nd.Variable
 //}
-//func (f *Function) Run(i *Variable) *Variable{
+//func (f *Function) Run(i *nd.Variable) *nd.Variable{
 //	x:=i.Data
 //	y:=f.iFunc.forward(x)
-//	o:=&Variable{y,nil}
+//	o:=&nd.Variable{y,nil}
 //	f.input=i
 //	f.ouput=o
 //	return o
 //}
 //
-//func (f *Function) Back(i *Variable) *Variable{
+//func (f *Function) Back(i *nd.Variable) *nd.Variable{
 //	b:=f.iFunc.backward(f.input.Data,i.Grad)
-//	o:=&Variable{i.Data,b}
+//	o:=&nd.Variable{i.Data,b}
 //	return o
 //}
 //
@@ -87,7 +87,7 @@
 //	return &r
 //}
 //
-//func numerical_diff(f func(i *Variable) *Variable,x *Variable,eps float64) * mat.Dense{
+//func numerical_diff(f func(i *nd.Variable) *nd.Variable,x *nd.Variable,eps float64) * mat.Dense{
 //	if eps== 0 {
 //		eps=1E-4
 //	}
@@ -95,9 +95,9 @@
 //	dec:=func(_,_ int,v float64) float64{return v-eps}
 //	div:=func(_,_ int,v float64) float64{return v/(2*eps)}
 //
-//	x0:=Variable{&mat.Dense{},&mat.Dense{}}
+//	x0:=nd.Variable{&mat.Dense{},&mat.Dense{}}
 //	x0.Data.Apply(add,x.Data)
-//	x1:=Variable{&mat.Dense{},&mat.Dense{}}
+//	x1:=nd.Variable{&mat.Dense{},&mat.Dense{}}
 //	x1.Data.Apply(dec,x.Data)
 //
 //	y0,y1:=f(&x0),f(&x1)
@@ -116,14 +116,14 @@
 //	d := mat.NewDense(1,1,[]float64{
 //		1.0,
 //	})
-//	x := &Variable{m,d}
+//	x := &nd.Variable{m,d}
 //	//A := NewFunction(&Square{})
 //	////B := NewFunction(&Exp{})
 //	////C := NewFunction(&Square{})
 //	//y:=A.Run(x)
 //	//printDense("A",y.Data)
 //
-//	com:= func (x *Variable) *Variable {
+//	com:= func (x *nd.Variable) *nd.Variable {
 //		A := NewFunction(&Square{})
 //		B := NewFunction(&Exp{})
 //		C := NewFunction(&Square{})

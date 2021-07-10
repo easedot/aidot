@@ -6,7 +6,7 @@
 //	"gonum.org/v1/gonum/mat"
 //)
 //
-//type Variable struct{
+//type nd.Variable struct{
 //	Data *mat.Dense
 //}
 //
@@ -16,10 +16,10 @@
 //type Function struct{
 //	iFunc       iFunc
 //}
-//func (f *Function) Run(i *Variable) *Variable {
+//func (f *Function) Run(i *nd.Variable) *nd.Variable {
 //	x:=i.Data
 //	y:=f.iFunc.forward(x)
-//	o:= Variable{y}
+//	o:= nd.Variable{y}
 //	return &o
 //}
 //
@@ -54,7 +54,7 @@
 //	//B := Function{&Exp{}}
 //	//C := Function{&Squre{}}
 //	//
-//	//x := Variable{m}
+//	//x := nd.Variable{m}
 //	//a := A.Run(&x)
 //	//b := B.Run(a)
 //	//y := C.Run(b)
@@ -63,7 +63,7 @@
 //	B := Function{&Exp{}}
 //	C := Function{&Squre{}}
 //
-//	x := Variable{m}
+//	x := nd.Variable{m}
 //	a := A.Run(&x)
 //	b := B.Run(a)
 //	y := C.Run(b)

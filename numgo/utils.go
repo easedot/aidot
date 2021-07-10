@@ -93,19 +93,24 @@ func _checkBroadCast(x0s *Shape, x1s *Shape, x0 *Variable, x1 *Variable) (*Varia
 	}
 	return x0,x1
 }
+func _checkSumToV(gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
+	x0s,x1s:=gx0.Shape(),gx1.Shape()
+	x0,x1:=_checkSumTo(x0s,x1s,gx0,gx1)
+	return x0,x1
+}
 func _checkSumTo(x0s *Shape, x1s *Shape, gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
 	if !x0s.E(x1s) {
-		if x0s.B(x1s) {
+		if x0s.B(x1s) {//x1 做过broadcast
 			gx1 = sumTo(gx1, x1s)
 		}
-		if x1s.B(x0s) {
+		if x1s.B(x0s) {//x0 做过broadcast
 			gx0 = sumTo(gx0, x0s)
 		}
 	}
 	return gx0, gx1
 }
 
-func NumericalDiff(f func(i ...*Variable) *Variable,x *Variable) * mat.Dense{
+func NumericalDiff(f func(i ...*Variable) *Variable,x *Variable) * Variable{
 	eps:=1E-4
 	addF:=func(_,_ int,v float64) float64{return v+eps}
 	decF:=func(_,_ int,v float64) float64{return v-eps}
@@ -122,7 +127,11 @@ func NumericalDiff(f func(i ...*Variable) *Variable,x *Variable) * mat.Dense{
 	o:=&mat.Dense{}
 	o.Sub(y1.Data,y0.Data)
 	o.Apply(divF,o)
-	return o
+
+	od:=&Variable{Data: o}
+	//x1小，x1做过broadcast，所以把x1,sum to 回小的
+	_,gx1:=_checkSumTo(od.Shape(),x.Shape(),x,od)
+	return gx1
 }
 func dotVar(v *Variable,verbose bool) string{
 	name:=v.Name

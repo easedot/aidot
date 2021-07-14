@@ -4,55 +4,57 @@ import (
 	"gonum.org/v1/gonum/mat"
 	ut "test_ai/utils"
 )
-func pow(x *Variable,c int)*Variable{
-	f:=NewFunction(&Pow{C:c})
+
+
+func Pow(x *Variable,c int)*Variable{
+	f:=NewFunction(&powFunc{C: c})
 	return f.Run(x)
 }
-type Pow struct {
+type powFunc struct {
 	Function
 	C int
 }
-func (s *Pow) forward(i []*Variable) []*Variable  {
+func (s *powFunc) forward(i []*Variable) []*Variable  {
 	o:=mat.Dense{}
 	o.Pow(i[0].Data,s.C)
 	return []*Variable{{Data:&o}}
 }
 
-func (s *Pow) backward(i,gy []*Variable) []*Variable  {
+func (s *powFunc) backward(i,o,gy []*Variable) []*Variable  {
 	x:=i[0]
 	c:=NewVar(float64(s.C))
-	o:=mul(mul(pow(x,s.C-1),gy[0]),c)
-	return []*Variable{o}
+	gx:= Mul(Mul(Pow(x,s.C-1),gy[0]),c)
+	return []*Variable{gx}
 }
 
-func neg(x *Variable)*Variable{
-	f:=NewFunction(&Neg{})
+func Neg(x *Variable)*Variable{
+	f:=NewFunction(&negFunc{})
 	return f.Run(x)
 }
-type Neg struct {
+type negFunc struct {
 	Function
 }
-func (e *Neg)forward(i []*Variable) []*Variable  {
+func (e *negFunc)forward(i []*Variable) []*Variable  {
 	o:=mat.Dense{}
 	o.Apply(ut.NegFunc,i[0].Data)
 	return [] *Variable{{Data:&o}}
 }
-func (e *Neg)backward(i,gy []*Variable) []*Variable  {
-	ngy:=neg(gy[0])
+func (e *negFunc)backward(i,o,gy []*Variable) []*Variable  {
+	ngy:=Neg(gy[0])
 	return [] *Variable{ngy}
 }
 
-func add(x0,x1 *Variable)*Variable{
-	f:=NewFunction(&Add{})
+func Add(x0,x1 *Variable)*Variable{
+	f:=NewFunction(&addFunc{})
 	y:=f.Run(x0,x1)
 	return y
 }
-type Add struct {
+type addFunc struct {
 	Function
 	x0s *Shape
 	x1s *Shape
 }
-func (a *Add) forward(ix []*Variable) []*Variable {
+func (a *addFunc) forward(ix []*Variable) []*Variable {
 	x0,x1:=ix[0],ix[1]
 	a.x0s, a.x1s =x0.Shape(),x1.Shape()
 	x0, x1 = _checkBroadCast(a.x0s, a.x1s, x0, x1)
@@ -60,23 +62,23 @@ func (a *Add) forward(ix []*Variable) []*Variable {
 	o.Add(x0.Data, x1.Data)
 	return []*Variable{{Data: &o}}
 }
-func (a *Add) backward(i,gy []*Variable) []*Variable  {
+func (a *addFunc) backward(i,o,gy []*Variable) []*Variable  {
 	gx0,gx1:=gy[0],gy[0]
 	gx0, gx1 = _checkSumTo(a.x0s, a.x1s, gx0, gx1)
 	return []*Variable{gx0, gx1}
 }
 
-func sub(x0,x1 *Variable)*Variable{
-	f:=NewFunction(&Sub{})
+func Sub(x0,x1 *Variable)*Variable{
+	f:=NewFunction(&subFunc{})
 	y:=f.Run(x0,x1)
 	return y
 }
-type Sub struct {
+type subFunc struct {
 	Function
 	x0s *Shape
 	x1s *Shape
 }
-func (a *Sub) forward(ix []*Variable) []*Variable {
+func (a *subFunc) forward(ix []*Variable) []*Variable {
 	x0,x1:=ix[0],ix[1]
 	a.x0s, a.x1s =x0.Shape(),x1.Shape()
 	x0, x1 = _checkBroadCast(a.x0s, a.x1s, x0, x1)
@@ -84,25 +86,25 @@ func (a *Sub) forward(ix []*Variable) []*Variable {
 	o.Sub(x0.Data,x1.Data)
 	return []*Variable{{Data:&o}}
 }
-func (a *Sub) backward(i,gy []*Variable) []*Variable  {
+func (a *subFunc) backward(i,o,gy []*Variable) []*Variable  {
 	g:=gy[0]
-	gx0,gx1:=g,neg(g)
+	gx0,gx1:=g,Neg(g)
 	gx0, gx1 = _checkSumTo(a.x0s, a.x1s, gx0, gx1)
 	return []*Variable{gx0,gx1}
 }
 
 
-func mul(x0,x1 *Variable)*Variable{
-	f:=NewFunction(&Mul{})
+func Mul(x0,x1 *Variable)*Variable{
+	f:=NewFunction(&mulFunc{})
 	y:=f.Run(x0,x1)
 	return y
 }
-type Mul struct {
+type mulFunc struct {
 	Function
 	x0s *Shape
 	x1s *Shape
 }
-func (m *Mul) forward(ix[]*Variable)[]*Variable  {
+func (m *mulFunc) forward(ix[]*Variable)[]*Variable  {
 	x0,x1:=ix[0],ix[1]
 	m.x0s, m.x1s =x0.Shape(),x1.Shape()
 	x0, x1 = _checkBroadCast(m.x0s, m.x1s, x0, x1)
@@ -110,26 +112,26 @@ func (m *Mul) forward(ix[]*Variable)[]*Variable  {
 	o.MulElem(x0.Data,x1.Data)
 	return []*Variable{{Data: &o}}
 }
-func (m *Mul) backward(i,gy []*Variable)[]*Variable  {
+func (m *mulFunc) backward(i,o,gy []*Variable)[]*Variable  {
 	g:=gy[0]
 	x0,x1:=i[0],i[1]
-	gx0:=mul(x1,g)
-	gx1:=mul(x0,g)
+	gx0:= Mul(x1,g)
+	gx1:= Mul(x0,g)
 	gx0,gx1  = _checkSumTo(m.x0s, m.x1s, gx0, gx1)
 	return []*Variable{gx0,gx1}
 }
 
-func div(x0,x1 *Variable)*Variable {
-	f:=NewFunction(&Div{})
+func Div(x0,x1 *Variable)*Variable {
+	f:=NewFunction(&divFunc{})
 	y:=f.Run(x0,x1)
 	return y
 }
-type Div struct {
+type divFunc struct {
 	Function
 	x0s *Shape
 	x1s *Shape
 }
-func (d *Div) forward(ix[]*Variable)[]*Variable {
+func (d *divFunc) forward(ix[]*Variable)[]*Variable {
 	x0,x1:=ix[0],ix[1]
 	d.x0s, d.x1s =x0.Shape(),x1.Shape()
 	x0, x1 = _checkBroadCast(d.x0s, d.x1s, x0, x1)
@@ -138,11 +140,12 @@ func (d *Div) forward(ix[]*Variable)[]*Variable {
 	return []*Variable{{Data:&o}}
 }
 
-func (d *Div) backward(i,gy []*Variable)[]*Variable {
+func (d *divFunc) backward(i,o,gy []*Variable)[]*Variable {
 	g:=gy[0]
 	x0,x1:=i[0],i[1]
-	gx0 :=div(g,x1)
-	gx1 :=mul(g, div(neg(x0), pow(x1, 2)))
+	gx0 := Div(g,x1)
+	gx1 := Mul(g, Div(Neg(x0), Mul(x1, x1)))
+	gx0,gx1  = _checkSumTo(d.x0s, d.x1s, gx0, gx1)
 	return []*Variable{gx0, gx1}
 }
 
@@ -205,10 +208,10 @@ func (d *Div) backward(i,gy []*Variable)[]*Variable {
 //	// It will panic if i or j are out of bounds for the matrix.
 //	At(i, j int) float64
 //
-//	// T returns the transpose of the Matrix. Whether T returns a copy of the
+//	// T returns the Transpose of the Matrix. Whether T returns a copy of the
 //	// underlying data is implementation dependent.
-//	// This method may be implemented using the Transpose type, which
-//	// provides an implicit matrix transpose.
+//	// This method may be implemented using the transposeFunc type, which
+//	// provides an implicit matrix Transpose.
 //	T() Matrix
 //}
 //

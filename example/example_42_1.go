@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"math/rand"
 
+	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
@@ -15,31 +16,52 @@ import (
 
 func main() {
 	a,_:=ep.Parse("sin(2*3.1415926*x)+x1")
+
+	x:=ng.NewRand(100,1)
+	x.Name="x"
 	x1:=ng.NewRand(100,1)
-	x2:=ng.NewRand(100,1)
-	y:=a.Eval(ep.Env{"x":x1,"x1":x2})
-
-	//切断计算图，从头开始
-	y,x:=ng.CopyData(y),ng.CopyData(x1)
-	x.Name,y.Name="X","Y"
-
-	model:=ng.MLP(ng.Sigmoid,ng.SGD(0.2),10,1)
-	model.Plot(x,true,"./temp/model.png")
-
-	iters:=10000
+	x1.Name="x1"
+	//y:=ng.Add(ng.Add(ng.NewVar(5),ng.Mul(ng.NewVar(2),x)),x1)
+	y:=a.Eval(ep.Env{"x":x,"x1":x1})
+	y.Name="y"
+	//ut.PrintDense("x",g.Data)
+	//ut.PrintDense("x",x.Data)
+	//ut.PrintDense("y",y.Data)
+	W:=ng.NewVar(0)
+	W.Name="w"
+	b:=ng.NewVar(0)
+	b.Name="b"
+	predict:=func(x *ng.Variable)*ng.Variable{
+		y:=ng.Add(ng.Matmul(x,W),b)
+		return y
+	}
+	lr:=ng.NewVar(0.1)
+	iters:=1000
 	for i:=0;i<iters;i++{
-		yPred:=model.Forward(x)
+		yPred :=predict(x)
 		loss:=ng.MeanSquaredError(y, yPred)
+		if i==0{
+			yPred.Plot(true,"./temp/pred.png")
+			loss.Plot(true,"./temp/loss.png")
+		}
 
-		model.ClearGrad()
+		W.ClearGrade()
+		b.ClearGrade()
 
-		//设为false可以大幅加快速度
 		loss.Backward(false)
 
-		model.Grad2Param()
+		//更新参数不使用连接图，直接修改data
+		wb:=&mat.Dense{}
+		wb.MulElem(lr.Data,W.Grad.Data)
+		W.Data.Sub(W.Data,wb)
 
-		if i%100==0{
-			fmt.Println(i,loss.Sprint("loss"))
+		bb:=&mat.Dense{}
+		bb.MulElem(lr.Data,b.Grad.Data)
+		b.Data.Sub(b.Data,bb)
+
+		fmt.Println(i,loss.Sprint("loss"),W.Sprint("w"),b.Sprint("b"))
+		if loss.At(0,0)<0.1{
+			break
 		}
 	}
 
@@ -55,7 +77,7 @@ func main() {
 		px := x.At(i, 0)
 		pts[i].X,predPts[i].X= px,px
 		pts[i].Y=y.At(i,0)
-		predPts[i].Y=model.Forward(ng.NewVar(px)).At(0,0)
+		predPts[i].Y=predict(ng.NewVar(px)).At(0,0)
 	}
 	ptsList:=[]plotter.XYs{pts,predPts}
 

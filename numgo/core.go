@@ -45,6 +45,38 @@ func (s *Shape) BC(i *Shape) bool{
 }
 
 
+
+func NewArange(start, stop, step float64)*Variable{
+	s:=ut.Arange(0,10.,0.5)
+	return NewVec(s...)
+}
+
+func NewZeros(r,c int) *Variable {
+	s:= make([]float64, r*c)
+	return NewMat(r,c,s...)
+}
+func NewOnes(r,c int) *Variable {
+	d := make([]float64, r*c)
+	for di:= range d{
+		d[di]=1
+	}
+	return NewMat(r,c,d...)
+}
+
+func NewRand(r,c int) *Variable {
+	s:=ut.Rand(r,c)
+	return NewMat(r,c,s...)
+}
+func NewRandN(r,c int) *Variable {
+	s:=ut.RandN(r,c)
+	return NewMat(r,c,s...)
+}
+func NewRandE(r,c int) *Variable {
+	s:=ut.RandE(r,c)
+	return NewMat(r,c,s...)
+}
+
+
 func NewVar(d float64)*Variable{
 	dv:=mat.NewDense(1,1,[]float64{d})
 	return &Variable{Data: dv}
@@ -60,6 +92,10 @@ func NewMat(r,c int,d... float64)*Variable{
 	return &Variable{Data: dv}
 }
 
+func CopyData(v *Variable)*Variable{
+	return &Variable{Data: v.Data}
+}
+
 type Variable struct{
 	Name string
 	Data *mat.Dense
@@ -67,10 +103,12 @@ type Variable struct{
 	Creator *Function
 	Level int
 }
+func (v *Variable)At(r,c int) float64{
+	return v.Data.At(r,c)
+}
 func (v *Variable)Grow(r,c int){
 	v.Data=v.Data.Grow(r,c).(*mat.Dense)
 }
-
 func (v *Variable)GrowTo(r,c int){
 	s:=v.Shape()
 	v.Data=v.Data.Grow(r-s.R,c-s.C).(*mat.Dense)
@@ -104,14 +142,14 @@ func (v *Variable) Shape() *Shape{
 }
 func (v *Variable) ReShape(r,c int)*Variable{
 	s:=NewShape(r,c)
-	return reshape(v,s)
+	return Reshape(v,s)
 }
 
 func (v *Variable) Transpose()*Variable{
-	return transpose(v)
+	return Transpose(v)
 }
 func (v *Variable) T()*Variable{
-	return transpose(v)
+	return Transpose(v)
 }
 
 func (v *Variable) ClearGrade()  {
@@ -143,7 +181,7 @@ func (v *Variable) Backward(retainGrad bool) {
 			if x.Grad==nil{
 				x.Grad= gxs[xi]
 			}else{
-				x.Grad=add(x.Grad, gxs[xi])
+				x.Grad= Add(x.Grad, gxs[xi])
 			}
 			if x.Creator!=nil && !seen[x.Creator]{
 				seen[x.Creator]=true
@@ -169,7 +207,7 @@ func NewFunction(f IFunc) Function {
 
 type IFunc interface {
 	forward(i []*Variable) []*Variable
-	backward(i,dy []*Variable) []*Variable
+	backward(i,o,dy []*Variable) []*Variable
 }
 
 type Function struct{
@@ -200,7 +238,7 @@ func (f *Function) Back(ig ...*Variable) []*Variable{
 	//		g.SetCreator(f)
 	//	}
 	//}
-	b:=f.Func.backward(f.Inputs,ig)
+	b:=f.Func.backward(f.Inputs,f.Outputs,ig)
 	return b
 }
 
@@ -208,9 +246,10 @@ func (f *Function) Back(ig ...*Variable) []*Variable{
 func MaxLevel(ivs []*Variable) (int){
 	max:=0
 	for _,v:=range ivs{
-		if v.Level>max{
+		if v!=nil && v.Level>max{
 			max=v.Level
 		}
 	}
 	return max
 }
+

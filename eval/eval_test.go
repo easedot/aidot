@@ -15,19 +15,19 @@ import (
 func TestEval(t *testing.T) {
 	tests := []struct {
 		expr string
-		env  Env
+		env  V
 		want *ng.Variable
 	}{
 		//{"sqrt(A / pi)", Env{"A": ng.NewVar(87616), "pi": ng.NewVar(math.Pi)}, ng.NewVar(167)},
-		{"pow(x, 3) + pow(y, 3)", Env{"x": ng.NewVar(12), "y": ng.NewVar(1)}, ng.NewVar(1729)},
-		{"pow(x, 3) + pow(y, 3)", Env{"x": ng.NewVar(9), "y": ng.NewVar(10)}, ng.NewVar(1729)},
-		{"5 / 9 * (F - 32)", Env{"F": ng.NewVar(-40)}, ng.NewVar(-40)},
-		{"5 / 9 * (F - 32)", Env{"F": ng.NewVar(32)}, ng.NewVar(0)},
-		{"5 / 9 * (F - 32)", Env{"F": ng.NewVar(212)}, ng.NewVar(100)},
+		{"pow(x, 3) + pow(y, 3)", V{"x": 12, "y": 1}, ng.NewVar(1729)},
+		{"pow(x, 3) + pow(y, 3)", V{"x":9, "y": ng.NewVar(10)}, ng.NewVar(1729)},
+		{"5 / 9 * (F - 32)", V{"F": -40}, ng.NewVar(-40)},
+		{"5 / 9 * (F - 32)", V{"F": 32}, ng.NewVar(0)},
+		{"5 / 9 * (F - 32)", V{"F": 212}, ng.NewVar(100)},
 		//!-Eval
 		// additional tests that don't appear in the book
-		{"-1 + -x", Env{"x": ng.NewVar(1)}, ng.NewVar(-2)},
-		{"-1 - x", Env{"x": ng.NewVar(1)}, ng.NewVar(-2)},
+		{"-1 + -x", V{"x": 1}, ng.NewVar(-2)},
+		{"-1 - x", V{"x": 1}, ng.NewVar(-2)},
 		//!+Eval
 	}
 	var prevExpr string
@@ -44,7 +44,7 @@ func TestEval(t *testing.T) {
 		}
 		got := expr.Eval(test.env)
 
-		if mat.Equal(got.Data,test.want.Data) {
+		if !mat.Equal(got.Data,test.want.Data) {
 			t.Errorf("%s.Eval() in %s got %s want %s\n",
 				test.expr, test.env.Sprint(), got.Sprint(""), test.want.Sprint(""))
 		}

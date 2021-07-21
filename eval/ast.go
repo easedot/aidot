@@ -8,7 +8,7 @@ import (
 // An Expr is an arithmetic expression.
 type Expr interface {
 	// Eval returns the value of this Expr in the environment env.
-	Eval(env Env) *ng.Variable
+	Eval(env V) *ng.Variable
 	// Check reports errors in this Expr and adds its Vars to the set.
 	Check(vars map[Var]bool) error
 	// String returns a human readable string of the Expr

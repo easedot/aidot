@@ -14,28 +14,24 @@ import (
 )
 
 func main() {
-	a,_:=ep.Parse("sin(2*3.1415926*x)+noise")
-	x:=ng.NewRand(100,1)
-	x.Name="X"
-	noise:=ng.NewRand(100,1)
-	//y:=ng.Add(ng.Add(ng.NewVar(5),ng.Mul(ng.NewVar(2),x)),x1)
-	y:=a.Eval(ep.Env{"x":x,"noise":noise})
-	y=&ng.Variable{Data:y.Data}
-	y.Name="Y"
+	a,_:=ep.Parse("sin(2*3.1415926*x)+x1")
+	x1:=ng.NewRand(100,1)
+	x2:=ng.NewRand(100,1)
+	y:=a.Eval(ep.V{"x":x1,"x1":x2})
 
-	model:=ng.MLP(nil,10,1)
-	//y.Plot(true,"./model.png")
+	//切断计算图，从头开始
+	y,x:=ng.CopyData(y),ng.CopyData(x1)
+	x.Name,y.Name="X","Y"
+	adm:=ng.Adam(0.01,0.9,0.999,1e-8)
+	//sgd := ng.SGD(0.2)
+	model:=ng.MLP(ng.Sigmoid, adm,10,1)
+	model.Plot(x,true,"./temp/model.png")
 
 	iters:=10000
 	for i:=0;i<iters;i++{
 		yPred:=model.Forward(x)
-		//yPred :=predict(x)
 		loss:=ng.MeanSquaredError(y, yPred)
 
-		if i==0{
-			yPred.Plot(true,"./temp/pred.png")
-			loss.Plot(true,"./temp/loss.png")
-		}
 		model.ClearGrad()
 
 		//设为false可以大幅加快速度
@@ -45,9 +41,6 @@ func main() {
 
 		if i%100==0{
 			fmt.Println(i,loss.Sprint("loss"))
-		}
-		if loss.At(0,0)<0.01{
-			break
 		}
 	}
 

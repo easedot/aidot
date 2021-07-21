@@ -225,29 +225,3 @@ func TestLinear(t *testing.T){
 
 }
 
-func TestSum (t *testing.T){
-	var tests = []struct{
-		x *Variable
-		want *Variable
-	}{
-		{NewVec(1,2,3,4,5,6), NewVar(21)},
-		{NewVar(21), NewVar(21)},
-		{NewMat(2,3,1,2,3,4,5,6), NewVar(21)},
-	}
-	testFunc:= Sum
-	for _,test :=range tests{
-		got:=testFunc(test.x)
-		if !mat.Equal(got.Data,test.want.Data){
-			t.Errorf("\n %s %s %s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
-		}
-		got.Backward(true)
-		g0:=test.x.Grad
-		dc0:=NumericalDiff(func(i *Variable) *Variable {
-			return testFunc(i)
-		}, test.x)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
-			t.Errorf("\n %s %s %s %s",test.x.Sprint("x0"),test.x.Sprint("x1"),g0.Sprint("g0"),dc0.Sprint("wg0"))
-		}
-	}
-}
-

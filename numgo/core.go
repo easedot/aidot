@@ -47,7 +47,7 @@ func (s *Shape) BC(i *Shape) bool{
 
 
 func NewArange(start, stop, step float64)*Variable{
-	s:=ut.Arange(0,10.,0.5)
+	s:=ut.Arange(start,stop,step)
 	return NewVec(s...)
 }
 

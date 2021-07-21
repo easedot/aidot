@@ -27,9 +27,9 @@ func (s *powFunc) backward(i,o,gy []*Variable) []*Variable  {
 	return []*Variable{gx}
 }
 
-func Neg(x *Variable)*Variable{
+func Neg(x interface{})*Variable{
 	f:=NewFunction(&negFunc{})
-	return f.Run(x)
+	return f.Run(AsVar(x))
 }
 type negFunc struct {
 	Function
@@ -44,9 +44,9 @@ func (e *negFunc)backward(i,o,gy []*Variable) []*Variable  {
 	return [] *Variable{ngy}
 }
 
-func Add(x0,x1 *Variable)*Variable{
+func Add(x0,x1 interface{})*Variable{
 	f:=NewFunction(&addFunc{})
-	y:=f.Run(x0,x1)
+	y:=f.Run(AsVar(x0), AsVar(x1))
 	return y
 }
 type addFunc struct {
@@ -68,9 +68,9 @@ func (a *addFunc) backward(i,o,gy []*Variable) []*Variable  {
 	return []*Variable{gx0, gx1}
 }
 
-func Sub(x0,x1 *Variable)*Variable{
+func Sub(x0,x1 interface{})*Variable{
 	f:=NewFunction(&subFunc{})
-	y:=f.Run(x0,x1)
+	y:=f.Run(AsVar(x0), AsVar(x1))
 	return y
 }
 type subFunc struct {
@@ -94,9 +94,9 @@ func (a *subFunc) backward(i,o,gy []*Variable) []*Variable  {
 }
 
 
-func Mul(x0,x1 *Variable)*Variable{
+func Mul(x0,x1 interface{})*Variable{
 	f:=NewFunction(&mulFunc{})
-	y:=f.Run(x0,x1)
+	y:=f.Run(AsVar(x0), AsVar(x1))
 	return y
 }
 type mulFunc struct {
@@ -121,9 +121,9 @@ func (m *mulFunc) backward(i,o,gy []*Variable)[]*Variable  {
 	return []*Variable{gx0,gx1}
 }
 
-func Div(x0,x1 *Variable)*Variable {
+func Div(x0,x1 interface{})*Variable {
 	f:=NewFunction(&divFunc{})
-	y:=f.Run(x0,x1)
+	y:=f.Run(AsVar(x0), AsVar(x1))
 	return y
 }
 type divFunc struct {

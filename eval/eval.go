@@ -8,12 +8,12 @@ import (
 
 //!+env
 
-type Env map[Var]*ng.Variable
+type V map[Var]interface{}
 
-func (e Env) Sprint() string {
+func (e V) Sprint() string {
 	s:=""
 	for k,v:=range e{
-		s+=fmt.Sprintf("%s=%s",k,v.Sprint(""))
+		s+=fmt.Sprintf("%s=%s",k,ng.AsVar(v).Sprint(""))
 	}
 	return s
 }
@@ -21,11 +21,11 @@ func (e Env) Sprint() string {
 
 //!+Eval1
 
-func (v Var) Eval(env Env) *ng.Variable {
-	return env[v]
+func (v Var) Eval(env V) *ng.Variable {
+	return ng.AsVar(env[v])
 }
 
-func (l literal) Eval(_ Env) *ng.Variable {
+func (l literal) Eval(_ V) *ng.Variable {
 	return ng.NewVar(float64(l))
 }
 
@@ -33,7 +33,7 @@ func (l literal) Eval(_ Env) *ng.Variable {
 
 //!+Eval2
 
-func (u unary) Eval(env Env) *ng.Variable {
+func (u unary) Eval(env V) *ng.Variable {
 	switch u.op {
 	case '+':
 		return u.x.Eval(env)
@@ -43,7 +43,7 @@ func (u unary) Eval(env Env) *ng.Variable {
 	panic(fmt.Sprintf("unsupported unary operator: %q", u.op))
 }
 
-func (b binary) Eval(env Env) *ng.Variable {
+func (b binary) Eval(env V) *ng.Variable {
 	switch b.op {
 	case '+':
 		return ng.Add(b.x.Eval(env),b.y.Eval(env))
@@ -57,7 +57,7 @@ func (b binary) Eval(env Env) *ng.Variable {
 	panic(fmt.Sprintf("unsupported binary operator: %q", b.op))
 }
 
-func (c call) Eval(env Env) *ng.Variable {
+func (c call) Eval(env V) *ng.Variable {
 	switch c.fn {
 	case "pow":
 		return ng.Pow(c.args[0].Eval(env), int(c.args[1].Eval(env).At(0,0)))

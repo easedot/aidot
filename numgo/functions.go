@@ -50,7 +50,7 @@ func (s *cosFunc) backward(i,o,gy []*Variable) []*Variable  {
 
 func Tanh(x *Variable)*Variable{
 	f:=NewFunction(&tanhFunc{})
-	y:=f.Run(x)
+	y:=f.Run(AsVar(x))
 	return y
 }
 type tanhFunc struct {
@@ -115,9 +115,10 @@ type expFunc struct {
 	Function
 }
 func (e *expFunc)forward(i []*Variable) []*Variable  {
-	o:=mat.Dense{}
-	o.Exp(i[0].Data)
-	return [] *Variable{{Data:&o}}
+	//todo 这里不能使用dense的计算，因为gonum要求方形矩阵？
+	x:=i[0]
+	x.Data.Apply(ut.ExpFunc,x.Data)
+	return [] *Variable{{Data:x.Data}}
 }
 func (e *expFunc)backward(i,o, gy []*Variable) []*Variable {
 	y:=o[0]
@@ -265,7 +266,7 @@ type sigmoid struct {
 
 func (s *sigmoid) forward(ix []*Variable) []*Variable {
 	x:=ix[0]
-	y:=Add(Mul(Tanh(Mul(x,NewVar(0.5))),NewVar(0.5)),NewVar(0.5))
+	y:=Add(Mul(Tanh(Mul(x,0.5)),0.5),0.5)
 	return []*Variable{y}
 }
 func (s *sigmoid) backward(is,os,gys []*Variable) []*Variable {
@@ -279,21 +280,20 @@ func Sigmoid(x *Variable)*Variable  {
 	return f.Run(x)
 }
 
-
 type meanSquaredError struct {
 	Function
 }
 func (m *meanSquaredError) forward(ix []*Variable) []*Variable {
 	x0,x1:=ix[0],ix[1]
 	diff:=Sub(x0,x1)
-	y:=Div(Sum(Mul(diff,diff)),NewVar(float64(diff.Shape().R)))
+	y:=Div(Sum(Mul(diff,diff)),diff.Shape().R)
 	return []*Variable{y}
 }
 func (m *meanSquaredError) backward(is,os,gys []*Variable) []*Variable {
 	gy:=gys[0]
 	x0,x1:=is[0],is[1]
 	diff:=Sub(x0,x1)
-	gx0:=Mul(Mul(gy,diff),Div(NewVar(2),NewVar(float64(diff.Shape().R))))
+	gx0:=Mul(Mul(gy,diff),Div(2,diff.Shape().R))
 	gx1:=Neg(gx0)
 	return []*Variable{gx0,gx1}
 }
@@ -302,4 +302,266 @@ func MeanSquaredError(x0,x1 *Variable)*Variable{
 	f := NewFunction(&meanSquaredError{})
 	return f.Run(x0,x1)
 }
+func Softmax1d(x *Variable)*Variable {
+	y := Exp(x)
+	sumY := _sumToC(y)
+	return Div(y, sumY)
+}
 
+func Softmax_cross_entropy_simple(x *Variable,t[]int)float64{
+	N:=x.Shape().R
+	p:=Softmax1d(x)
+	p=Clip(p,1e-15,1.0)
+	p=Log(p)
+	p=Getitem(p,ut.ArangeInt(0,N,1),t)
+	sum:=Sum(p)
+	y:=-1*sum.At(0,0)/float64(N)
+	return y
+}
+
+func SoftmaxCrossEntroy(x *Variable,t[]int) *Variable{
+	f:=NewFunction(&softmaxCrossEntropy{t:t})
+	y:=f.Run(x)
+	return y
+}
+type softmaxCrossEntropy struct {
+	Function
+	t []int
+}
+func (s *softmaxCrossEntropy) forward(is []*Variable) []*Variable {
+	x:=is[0]
+	N:=x.Shape().R
+	logZ:=_logsumexp(x,1)
+	logP:=Sub(x,logZ)
+	logPd:=SelRowCol(logP.Data,s.t...) //Getitem(logP,ut.ArangeInt(0,N,1),s.t)
+	logP.Data=logPd
+	sum:=Neg(Sum(logP))
+	y:= sum.At(0,0)/float64(N)
+	return []*Variable{NewVar(y)}
+}
+func (s *softmaxCrossEntropy) backward(is,os,gys []*Variable) []*Variable {
+	gy:=gys[0]
+	x:=is[0]
+	N,ClsNum:=x.Data.Dims()
+	gy=Mul(gy,1.0/float64(N))
+	y:=Softmax(x,1)
+	//to one hot
+	eyes := _eyes(ClsNum)
+	tOneHot:= OneHot(eyes,s.t)
+	y=Mul(Sub(y,tOneHot),gy)
+	return []*Variable{y}
+}
+
+func Softmax(x *Variable,axis interface{})*Variable{
+	f:=NewFunction(&softmax{axis: axis})
+	y:=f.Run(x)
+	return y
+}
+type softmax struct {
+	Function
+	axis interface{}
+}
+func (s *softmax) forward(is []*Variable) []*Variable {
+	x:=is[0]
+	y := Sub(x, Max(x, s.axis))
+	y=Exp(y)
+	ym:=_sum(y,s.axis,true)
+	y=Div(y,ym)
+	return []*Variable{y}
+}
+func (s *softmax) backward(is,os,gys []*Variable) []*Variable {
+	gy:=gys[0]
+	y:=os[0]
+	gx:=Mul(y,gy)
+	sumdx:=_sum(gx,s.axis,true)
+	gx=Sub(gx,Mul(y,sumdx))
+	return []*Variable{gx}
+}
+
+type logSoftmax struct {
+	Function
+}
+func (s *logSoftmax) forward(is []*Variable) []*Variable {
+	return []*Variable{}
+}
+func (s *logSoftmax) backward(is,os,gys []*Variable) []*Variable {
+	return []*Variable{}
+}
+
+type reLU struct {
+	Function
+}
+func (s *reLU) forward(is []*Variable) []*Variable {
+	return []*Variable{}
+}
+func (s *reLU) backward(is,os,gys []*Variable) []*Variable {
+	return []*Variable{}
+}
+
+type leakyReLU struct {
+	Function
+}
+func (s *leakyReLU) forward(is []*Variable) []*Variable {
+	return []*Variable{}
+}
+func (s *leakyReLU) backward(is,os,gys []*Variable) []*Variable {
+	return []*Variable{}
+}
+
+func Getitem(x *Variable,rs []int,cs []int)*Variable{
+	f:=NewFunction(&getItem{rs:rs,cs:cs})
+	y:=f.Run(x)
+	return y
+}
+type getItem struct {
+	Function
+	rs []int
+	cs []int
+}
+
+func (s *getItem) forward(is []*Variable) []*Variable {
+	x:=is[0]
+	var y []float64
+	for i:=0;i<len(s.rs);i++{
+		r:=s.rs[i]
+		c:=s.cs[i]
+		y=append(y,x.At(r,c))
+	}
+	return []*Variable{NewVec(y...)}
+}
+
+func (s *getItem) backward(is,os,gys []*Variable) []*Variable {
+	//x:=is[0]
+
+	return []*Variable{}
+}
+type GetItemGrad struct {
+	Function
+
+}
+
+
+func Log(x *Variable)*Variable{
+	x.Data.Apply(ut.LogFunc,x.Data)
+	return x
+}
+
+
+func Clip(x *Variable,min,max float64)*Variable{
+	f:=NewFunction(&clipFunc{min: min,max:max})
+	y:=f.Run(x)
+	return y
+}
+
+type clipFunc struct {
+	Function
+	max,min float64
+}
+func (self *clipFunc) forward(is []*Variable) []*Variable {
+	var maxMinFunc=func(_,_ int,v float64) float64{
+		if v<= self.min{
+			return self.min
+		}
+		if v>= self.max{
+			return self.max
+		}
+		return v
+	}
+	x:=is[0]
+	y:=mat.Dense{}
+	y.Apply(maxMinFunc,x.Data)
+	return [] *Variable{{Data:&y}}
+}
+func (self *clipFunc) backward(is,os,gys []*Variable) []*Variable {
+	eq:= func(x,y*Variable,r,c int) {
+		xv := x.At(r, c)
+		if xv >=self.min && xv <=self.max {
+			y.Data.Set(r,c,1)
+		}else{
+			y.Data.Set(r,c,0)
+		}
+	}
+	gy:=gys[0]
+	x:=is[0]
+	mask:=&Variable{Data:ut.LikeZeros(x.Data)}
+	_where(x,mask,eq)
+	gx:=Mul(gy,mask)
+	return [] *Variable{gx}
+}
+
+func Max(x *Variable,axis interface{})*Variable{
+	f:=NewFunction(&maxFunc{axis: axis})
+	y:=f.Run(x)
+	return y
+}
+
+type maxFunc struct {
+	Function
+	axis interface{}
+}
+
+func (s *maxFunc) forward(is []*Variable) []*Variable {
+	x:=is[0]
+	y:=_max(x,s.axis,true)
+	return []*Variable{y}
+}
+func (s *maxFunc) backward(is,os,gys []*Variable) []*Variable {
+	eq:= func(x,y*Variable,r,c int) {
+		if x.At(r,c)==y.At(r,c){
+			y.Data.Set(r,c,1)
+		}else{
+			y.Data.Set(r,c,0)
+		}
+	}
+	gy:=gys[0]
+	x:=is[0]
+	y:=os[0]
+	shape:=_maxBackwardShape(x,s.axis)
+	sp := NewShape(shape[0], shape[1])
+	gy = Reshape(gy, sp)
+	y = Reshape(y, sp)
+	y= _broadcastTo(y,x.Shape())
+	mask:= _where(x,y,eq)
+	//gy=_broadcastTo(gy,mask.Shape())
+	rst := Mul(gy, mask)
+	return []*Variable{rst}
+}
+
+
+func Min(x *Variable,axis interface{})*Variable{
+	f:=NewFunction(&minFunc{axis: axis})
+	y:=f.Run(x)
+	return y
+}
+
+type minFunc struct {
+	Function
+	axis interface{}
+}
+
+func (s *minFunc) forward(is []*Variable) []*Variable {
+	x:=is[0]
+	y:=_min(x,s.axis,true)
+	return []*Variable{y}
+}
+func (s *minFunc) backward(is,os,gys []*Variable) []*Variable {
+	eq:= func(x,y*Variable,r,c int) {
+		if x.At(r,c)==y.At(r,c){
+			y.Data.Set(r,c,1)
+		}else{
+			y.Data.Set(r,c,0)
+		}
+	}
+	gy:=gys[0]
+	x:=is[0]
+	y:=os[0]
+	shape:=_maxBackwardShape(x,s.axis)
+	sp := NewShape(shape[0], shape[1])
+	gy = Reshape(gy, sp)
+	y = Reshape(y, sp)
+	y= _broadcastTo(y,x.Shape())
+	mask:= _where(x,y,eq)
+	//gy=_broadcastTo(gy,mask.Shape())
+	rst := Mul(gy, mask)
+	return []*Variable{rst}
+}

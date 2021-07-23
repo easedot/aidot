@@ -10,10 +10,13 @@ import (
 
 	"gonum.org/v1/gonum/mat"
 	"test_ai/intset"
+	nd "test_ai/numed"
 	ut "test_ai/utils"
 )
 func AsVar(v interface{}) *Variable{
 	switch v.(type) {
+	case *mat.Dense:
+		return &Variable{Data: v.(*mat.Dense)}
 	case float64:
 		return NewVar(v.(float64))
 	case *Variable:
@@ -63,7 +66,7 @@ func _sumToC(x * Variable) *Variable{
 	return &Variable{Data:y}
 }
 
-func _sumTo(x *Variable,s *Shape)*Variable{
+func _sumTo(x *Variable,s *nd.Shape)*Variable{
 	y:=x
 	if s.R==1 && s.C==1{
 		s:=mat.Sum(x.Data)
@@ -79,7 +82,7 @@ func _sumTo(x *Variable,s *Shape)*Variable{
 }
 
 func _logsumexp(x *Variable,axis interface{})*Variable{
-	m:=Max(x,axis);
+	m:=Max(x,axis)
 	y:=Sub(x,m)
 	y=Exp(y)
 	s:=_sum(y,axis,true)
@@ -289,14 +292,14 @@ func Cross(x,y *mat.Dense)*mat.Dense{
 func MeshGrid(x,y *Variable)(*Variable,*Variable){
 	xs:=x.Shape()
 	ys:=y.Shape()
-	sp:=NewShape(ys.C,xs.C)
+	sp:=nd.NewShape(ys.C,xs.C)
 	y=y.T()
 	xm:=_broadcastTo(x,sp)
 	ym:=_broadcastTo(y,sp)
 	return xm,ym
 }
 
-func _broadcastTo(x *Variable,s *Shape) *Variable{
+func _broadcastTo(x *Variable,s *nd.Shape) *Variable{
 	xs:=x.Shape()
 	xr,xc:=xs.R,xs.C
 	b:=mat.Dense{}
@@ -327,7 +330,7 @@ func _broadcastTo(x *Variable,s *Shape) *Variable{
 	}
 	return &Variable{Data:y}
 }
-func _checkBroadCast(x0s *Shape, x1s *Shape, x0 *Variable, x1 *Variable) (*Variable, *Variable) {
+func _checkBroadCast(x0s *nd.Shape, x1s *nd.Shape, x0 *Variable, x1 *Variable) (*Variable, *Variable) {
 	if !x0s.E(x1s) {
 		if x0s.B(x1s) {
 			x1 = BroadCastTo(x1, x0s)
@@ -343,7 +346,7 @@ func _checkSumToV(gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
 	x0,x1:=_checkSumTo(x0s,x1s,gx0,gx1)
 	return x0,x1
 }
-func _checkSumTo(x0s *Shape, x1s *Shape, gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
+func _checkSumTo(x0s *nd.Shape, x1s *nd.Shape, gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
 	if !x0s.E(x1s) {
 		if x0s.B(x1s) {//x1 做过broadcast
 			gx1 = SumTo(gx1, x1s)

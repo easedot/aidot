@@ -27,8 +27,9 @@ func (m *Model) Plot(x *Variable,verbos bool,file string) {
 	y:=m.IModel.forward(x)
 	y.Plot(verbos,file)
 }
-func (m *Model) Forward(x *Variable) *Variable {
-	return m.IModel.forward(x)
+func (m *Model) Forward(x interface{}) *Variable {
+	xv:=AsVar(x)
+	return m.IModel.forward(xv)
 }
 func (m *Model) Grad2Param(){
 	for _,l:=range m.IModel.getLayer(){
@@ -55,11 +56,11 @@ func MLP(active ActiveFunc,opt IUpdateGrad,outSizes ...int) *Model{
 	for i,o:=range outSizes{
 		var l *Layer
 		if i%2==0{
-			//l=NewLinear(0,o,true,nil)
+			l=NewLinear(0,o,true,mlp.Active)
 		}else{
-			//l=NewLinear(0,o,true,mlp.Active)
+			l=NewLinear(0,o,true,nil)
 		}
-		l=NewLinear(0,o,true,mlp.Active)
+		//l=NewLinear(0,o,true,mlp.Active)
 		mlp.layers=append(mlp.Model.layers,l)
 	}
 	return &Model{IModel: mlp,IUpdateGrad: opt}

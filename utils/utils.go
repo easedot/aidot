@@ -23,6 +23,8 @@ var LogFunc=func(_,_ int,v float64) float64{return math.Log(v)}
 //	//rand.Seed()
 //}
 
+
+
 type filterFunc func(i int,v float64) bool
 
 
@@ -257,6 +259,24 @@ func CrossSlice(x,y []float64)[][]float64{
 		r[i]=[]float64{x[i],y[i]}
 	}
 	return r
+}
+
+func ToFloat64(s []int)[]float64{
+	l:=len(s)
+	t:=make([]float64,l)
+	for i,v:=range s{
+		t[i]=float64(v)
+	}
+	return t
+}
+
+func ToInt(s []float64)[]int{
+	l:=len(s)
+	t:=make([]int,l)
+	for i,v:=range s{
+		t[i]=int(v)
+	}
+	return t
 }
 
 //t:=ng.NewVar(1)

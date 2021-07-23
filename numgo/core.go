@@ -5,44 +5,12 @@ import (
 	"sort"
 
 	"gonum.org/v1/gonum/mat"
+	nd "test_ai/numed"
 	ut "test_ai/utils"
 )
 
-const Backprop =true
+var Backprop =true
 
-func NewShape(r,c int)*Shape{
-	return &Shape{r,c}
-}
-type Shape struct {
-	R,C int
-}
-
-func (s *Shape) E(i *Shape) bool{
-	return s.R==i.R && s.C==i.C
-}
-func (s *Shape) G(i *Shape) bool{
-	return s.R>i.R && s.C>=i.C||s.C>i.C && s.R>=i.R
-}
-func (s *Shape) L(i *Shape) bool{
-	return s.R<i.R && s.C<=i.C||s.C<i.C && s.R<=i.R
-}
-func (s *Shape) X(i *Shape) bool{
-	return s.R<i.R && s.C>i.C||s.C<i.C && s.R>i.R
-}
-func (s *Shape) B(i *Shape) bool{
-	return s.BA(i)||s.BR(i)||s.BC(i)
-}
-func (s *Shape) BA(i *Shape) bool{
-	//return s.R%i.R==0 && s.C%i.C==0
-	return i.R==1 && i.C==1
-}
-
-func (s *Shape) BR(i *Shape) bool{
-	return s.R%i.R==0 && s.C==i.C
-}
-func (s *Shape) BC(i *Shape) bool{
-	return s.C%i.C==0 && s.R==i.R
-}
 
 
 
@@ -55,13 +23,13 @@ func NewZeros(r,c int) *Variable {
 	s:= make([]float64, r*c)
 	return NewMat(r,c,s...)
 }
-func NewOnes(r,c int) *Variable {
-	d := make([]float64, r*c)
-	for di:= range d{
-		d[di]=1
-	}
-	return NewMat(r,c,d...)
-}
+//func NewOnes(r,c int) *Variable {
+//	d := make([]float64, r*c)
+//	for di:= range d{
+//		d[di]=1
+//	}
+//	return NewMat(r,c,d...)
+//}
 
 func NewRand(r,c int) *Variable {
 	s:=ut.Rand(r,c)
@@ -87,6 +55,17 @@ func NewVec(d... float64)*Variable{
 	dv:=mat.NewDense(1,l,d)
 	return &Variable{Data: dv}
 }
+
+func NewVecInt(d... int)*Variable{
+	l:=len(d)
+	df:=make([]float64,l)
+	for i,v :=range d{
+		df[i]=float64(v)
+	}
+	dv:=mat.NewDense(1,l,df)
+	return &Variable{Data: dv}
+}
+
 func NewMat(r,c int,d... float64)*Variable{
 	dv:=mat.NewDense(r,c,d)
 	return &Variable{Data: dv}
@@ -98,6 +77,7 @@ func CopyData(v *Variable)*Variable{
 
 type Variable struct{
 	Name string
+	//Data *nd.NumEd
 	Data *mat.Dense
 	Grad *Variable
 	Creator *Function
@@ -137,11 +117,11 @@ func (v *Variable)Sprint(name string) string {
 func (v *Variable) DataType() string{
 	return fmt.Sprintf("%T",v.Data.At(0,0))
 }
-func (v *Variable) Shape() *Shape{
-	return NewShape(v.Data.Dims())
+func (v *Variable) Shape() *nd.Shape{
+	return nd.NewShape(v.Data.Dims())
 }
 func (v *Variable) ReShape(r,c int)*Variable{
-	s:=NewShape(r,c)
+	s:=nd.NewShape(r,c)
 	return Reshape(v,s)
 }
 
@@ -198,7 +178,22 @@ func (v *Variable) Backward(retainGrad bool) {
 		}
 	}
 }
-
+func (v *Variable) Var() float64{
+	return v.At(0,0)
+}
+func (v *Variable) Mean() float64{
+	xr,xc:=v.Data.Dims()
+	size:=float64(xr*xc)
+	trued:=0.0
+	for i:=0;i<xr;i++{
+		for j:=0;j<xc;j++{
+			if v.At(i,j)==1{
+				trued+=1
+			}
+		}
+	}
+	return trued/size
+}
 //Function
 
 func NewFunction(f IFunc) Function {
@@ -253,3 +248,145 @@ func MaxLevel(ivs []*Variable) (int){
 	return max
 }
 
+func Pow(x *Variable,c int)*Variable{
+	f:=NewFunction(&powFunc{C: c})
+	return f.Run(x)
+}
+type powFunc struct {
+	Function
+	C int
+}
+func (s *powFunc) forward(i []*Variable) []*Variable  {
+	o:=mat.Dense{}
+	o.Pow(i[0].Data,s.C)
+	return []*Variable{{Data:&o}}
+}
+
+func (s *powFunc) backward(i,o,gy []*Variable) []*Variable  {
+	x:=i[0]
+	c:=NewVar(float64(s.C))
+	gx:= Mul(Mul(Pow(x,s.C-1),gy[0]),c)
+	return []*Variable{gx}
+}
+
+func Neg(x interface{})*Variable{
+	f:=NewFunction(&negFunc{})
+	return f.Run(AsVar(x))
+}
+type negFunc struct {
+	Function
+}
+func (e *negFunc)forward(i []*Variable) []*Variable  {
+	o:=mat.Dense{}
+	o.Apply(ut.NegFunc,i[0].Data)
+	return [] *Variable{{Data:&o}}
+}
+func (e *negFunc)backward(i,o,gy []*Variable) []*Variable  {
+	ngy:=Neg(gy[0])
+	return [] *Variable{ngy}
+}
+
+func Add(x0,x1 interface{})*Variable{
+	f:=NewFunction(&addFunc{})
+	y:=f.Run(AsVar(x0), AsVar(x1))
+	return y
+}
+type addFunc struct {
+	Function
+	x0s *nd.Shape
+	x1s *nd.Shape
+}
+func (a *addFunc) forward(ix []*Variable) []*Variable {
+	x0,x1:=ix[0],ix[1]
+	a.x0s, a.x1s =x0.Shape(),x1.Shape()
+	x0, x1 = _checkBroadCast(a.x0s, a.x1s, x0, x1)
+	o := mat.Dense{}
+	o.Add(x0.Data, x1.Data)
+	return []*Variable{{Data: &o}}
+}
+func (a *addFunc) backward(i,o,gy []*Variable) []*Variable  {
+	gx0,gx1:=gy[0],gy[0]
+	gx0, gx1 = _checkSumTo(a.x0s, a.x1s, gx0, gx1)
+	return []*Variable{gx0, gx1}
+}
+
+func Sub(x0,x1 interface{})*Variable{
+	f:=NewFunction(&subFunc{})
+	y:=f.Run(AsVar(x0), AsVar(x1))
+	return y
+}
+type subFunc struct {
+	Function
+	x0s *nd.Shape
+	x1s *nd.Shape
+}
+func (a *subFunc) forward(ix []*Variable) []*Variable {
+	x0,x1:=ix[0],ix[1]
+	a.x0s, a.x1s =x0.Shape(),x1.Shape()
+	x0, x1 = _checkBroadCast(a.x0s, a.x1s, x0, x1)
+	o:=mat.Dense{}
+	o.Sub(x0.Data,x1.Data)
+	return []*Variable{{Data:&o}}
+}
+func (a *subFunc) backward(i,o,gy []*Variable) []*Variable  {
+	g:=gy[0]
+	gx0,gx1:=g,Neg(g)
+	gx0, gx1 = _checkSumTo(a.x0s, a.x1s, gx0, gx1)
+	return []*Variable{gx0,gx1}
+}
+
+
+func Mul(x0,x1 interface{})*Variable{
+	f:=NewFunction(&mulFunc{})
+	y:=f.Run(AsVar(x0), AsVar(x1))
+	return y
+}
+type mulFunc struct {
+	Function
+	x0s *nd.Shape
+	x1s *nd.Shape
+}
+func (m *mulFunc) forward(ix[]*Variable)[]*Variable  {
+	x0,x1:=ix[0],ix[1]
+	m.x0s, m.x1s =x0.Shape(),x1.Shape()
+	x0, x1 = _checkBroadCast(m.x0s, m.x1s, x0, x1)
+	o:=mat.Dense{}
+	o.MulElem(x0.Data,x1.Data)
+	return []*Variable{{Data: &o}}
+}
+func (m *mulFunc) backward(i,o,gy []*Variable)[]*Variable  {
+	g:=gy[0]
+	x0,x1:=i[0],i[1]
+	gx0:= Mul(x1,g)
+	gx1:= Mul(x0,g)
+	gx0,gx1  = _checkSumTo(m.x0s, m.x1s, gx0, gx1)
+	return []*Variable{gx0,gx1}
+}
+
+func Div(x0,x1 interface{})*Variable {
+	f:=NewFunction(&divFunc{})
+	y:=f.Run(AsVar(x0), AsVar(x1))
+	return y
+}
+type divFunc struct {
+	Function
+	x0s *nd.Shape
+	x1s *nd.Shape
+}
+func (d *divFunc) forward(ix[]*Variable)[]*Variable {
+	x0,x1:=ix[0],ix[1]
+	d.x0s, d.x1s =x0.Shape(),x1.Shape()
+	x0, x1 = _checkBroadCast(d.x0s, d.x1s, x0, x1)
+	o:=mat.Dense{}
+	o.DivElem(x0.Data,x1.Data)
+	return []*Variable{{Data:&o}}
+}
+
+func (d *divFunc) backward(i,o,gy []*Variable)[]*Variable {
+	g:=gy[0]
+	x0,x1:=i[0],i[1]
+	gx0 := Div(g,x1)
+	gx1 := Mul(g, Div(Neg(x0), Mul(x1, x1)))
+	gx0,gx1  = _checkSumTo(d.x0s, d.x1s, gx0, gx1)
+	return []*Variable{gx0, gx1}
+}

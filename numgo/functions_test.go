@@ -160,3 +160,27 @@ func TestSoftmaxCrossEntroy(t *testing.T){
 		}
 	}
 }
+
+func TestSigmoid(t *testing.T){
+	var tests = []struct{
+		x *Variable
+		want *Variable
+	}{
+		{NewMat(2,3,0,1,2,0,2,4),NewMat(2,3,0.50000,0.73106,0.88080,0.50000,0.88080,0.98201)},
+	}
+	testFunc:= Sigmoid
+	for _,test :=range tests{
+		got:=testFunc(test.x)
+		if !mat.EqualApprox(got.Data,test.want.Data,1e-4){
+			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
+		}
+		got.Backward(true)
+		g0:=test.x.Grad
+		dc0:=NumericalDiff(func(i *Variable) *Variable {
+			return testFunc(i)
+		}, test.x)
+		if !mat.EqualApprox(g0.Data,dc0.Data,1e-8){
+			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),g0.Sprint("g"),dc0.Sprint("wg"))
+		}
+	}
+}

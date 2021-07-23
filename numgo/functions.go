@@ -2,6 +2,7 @@ package numgo
 
 import (
 	"gonum.org/v1/gonum/mat"
+	nd "test_ai/numed"
 	ut "test_ai/utils"
 )
 
@@ -71,15 +72,15 @@ func (s *tanhFunc) backward(i,o,gy []*Variable) []*Variable  {
 
 
 
-func Reshape(x *Variable,s *Shape)*Variable{
+func Reshape(x *Variable,s *nd.Shape)*Variable{
 	f:=NewFunction(&reshapeFunc{S: s})
 	y:=f.Run(x)
 	return y
 }
 type reshapeFunc struct {
 	Function
-	S *Shape
-	Xs *Shape
+	S *nd.Shape
+	Xs *nd.Shape
 }
 func (s *reshapeFunc) forward(ix[]*Variable)[]*Variable {
 	x:=ix[0]
@@ -134,7 +135,7 @@ func Sum(x *Variable)*Variable{
 }
 type sumFunc struct {
 	Function
-	Xs *Shape
+	Xs *nd.Shape
 }
 func (s *sumFunc) forward(ix[]*Variable)[]*Variable{
 	x:=ix[0]
@@ -148,15 +149,15 @@ func (s *sumFunc) backward(i,o,gy []*Variable)[]*Variable{
 	return []*Variable{gx}
 }
 
-func SumTo(x *Variable,s *Shape)*Variable{
+func SumTo(x *Variable,s *nd.Shape)*Variable{
 	f:=NewFunction(&sumToFunc{S: s})
 	y:=f.Run(x)
 	return y
 }
 type sumToFunc struct {
 	Function
-	S *Shape
-	Xs *Shape
+	S *nd.Shape
+	Xs *nd.Shape
 }
 func (s *sumToFunc) forward(ix[]*Variable)[]*Variable{
 	x:=ix[0]
@@ -170,15 +171,15 @@ func (s *sumToFunc) backward(i,o,gy []*Variable)[]*Variable{
 	return []*Variable{gx}
 }
 
-func BroadCastTo(x *Variable,s *Shape)*Variable{
+func BroadCastTo(x *Variable,s *nd.Shape)*Variable{
 	f:=NewFunction(&broadcastToFunc{S: s})
 	y:=f.Run(x)
 	return y
 }
 type broadcastToFunc struct {
 	Function
-	S *Shape
-	Xs *Shape
+	S *nd.Shape
+	Xs *nd.Shape
 }
 func (s *broadcastToFunc) forward(ix[]*Variable)[]*Variable{
 	s.Xs =ix[0].Shape()
@@ -319,9 +320,25 @@ func Softmax_cross_entropy_simple(x *Variable,t[]int)float64{
 	return y
 }
 
-func SoftmaxCrossEntroy(x *Variable,t[]int) *Variable{
+func Accuracy(y interface{},t[]int) *Variable{
+	yv:=AsVar(y)
+	eq:= func(x,y*Variable,r,c int) {
+		if x.At(r,c)==y.At(r,c){
+			y.Data.Set(r,c,1)
+		}else{
+			y.Data.Set(r,c,0)
+		}
+	}
+	tv:=NewVecInt(t...)
+	pred:=_agrMax(yv,1,true)
+	mask:= _where(pred,tv,eq)
+	return NewVar(mask.Mean())
+}
+
+func SoftmaxCrossEntroy(x interface{},t[]int) *Variable{
+	xv:=AsVar(x)
 	f:=NewFunction(&softmaxCrossEntropy{t:t})
-	y:=f.Run(x)
+	y:=f.Run(xv)
 	return y
 }
 type softmaxCrossEntropy struct {
@@ -517,7 +534,7 @@ func (s *maxFunc) backward(is,os,gys []*Variable) []*Variable {
 	x:=is[0]
 	y:=os[0]
 	shape:=_maxBackwardShape(x,s.axis)
-	sp := NewShape(shape[0], shape[1])
+	sp := nd.NewShape(shape[0], shape[1])
 	gy = Reshape(gy, sp)
 	y = Reshape(y, sp)
 	y= _broadcastTo(y,x.Shape())
@@ -556,7 +573,7 @@ func (s *minFunc) backward(is,os,gys []*Variable) []*Variable {
 	x:=is[0]
 	y:=os[0]
 	shape:=_maxBackwardShape(x,s.axis)
-	sp := NewShape(shape[0], shape[1])
+	sp := nd.NewShape(shape[0], shape[1])
 	gy = Reshape(gy, sp)
 	y = Reshape(y, sp)
 	y= _broadcastTo(y,x.Shape())

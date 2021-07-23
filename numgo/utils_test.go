@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"gonum.org/v1/gonum/mat"
+	"test_ai/utils"
 )
 
 func TestMaxFunc(t *testing.T){
@@ -103,4 +104,41 @@ func TestMaxBackwardShape(t *testing.T) {
 		}
 	}
 
+}
+
+func TestSelRow(t *testing.T) {
+	var tests = []struct{
+		x *Variable
+		s []int
+		want *Variable
+	}{
+		{NewMat(2,3,1,2,3,3,2,1),[]int{1},NewVec(3,2,1)},
+		{NewMat(3,3,1,2,3,3,2,1,4,5,6),[]int{0,2},NewMat(2,3,1,2,3,4,5,6)},
+		{NewMat(4,3,1,2,3,3,2,1,4,5,6,6,5,4),[]int{1,3},NewMat(2,3,3,2,1,6,5,4)},
+	}
+	testFunc := SelRow
+	for _,test :=range tests {
+		got := testFunc(test.x.Data,test.s...)
+		if !mat.Equal(got, test.want.Data) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), utils.SprintDense("y",got), test.want.Sprint("w"))
+		}
+	}
+}
+
+func TestSelRowCol(t *testing.T) {
+	var tests = []struct{
+		x *Variable
+		s []int
+		want *Variable
+	}{
+		{NewMat(2,3,1,2,3,3,2,1),[]int{1,2},NewMat(2,1,2,1)},
+		{NewMat(3,3,1,2,3,3,2,1,4,5,6),[]int{1,2,0},NewMat(3,1,2,1,4)},
+	}
+	testFunc := SelRowCol
+	for _,test :=range tests {
+		got := testFunc(test.x.Data,test.s...)
+		if !mat.Equal(got, test.want.Data) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), utils.SprintDense("y",got), test.want.Sprint("w"))
+		}
+	}
 }

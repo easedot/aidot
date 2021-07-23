@@ -22,9 +22,9 @@ func main() {
 	//切断计算图，从头开始
 	y,x:=ng.CopyData(y),ng.CopyData(x1)
 	x.Name,y.Name="X","Y"
-	adm:=ng.Adam(0.01,0.9,0.999,1e-8)
-	//sgd := ng.SGD(0.2)
-	model:=ng.MLP(ng.Sigmoid, adm,10,1)
+	//adm:=ng.Adam(0.01,0.9,0.999,1e-8)
+	sgd := ng.SGD(0.2)
+	model:=ng.MLP(ng.Sigmoid, sgd,10,1)
 	model.Plot(x,true,"./temp/model.png")
 
 	iters:=10000

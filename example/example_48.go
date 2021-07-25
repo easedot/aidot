@@ -6,11 +6,11 @@ import (
 	"image/color"
 	"math/rand"
 
-	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/palette"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
+	nd "test_ai/numed"
 	ng "test_ai/numgo"
 	ut "test_ai/utils"
 )
@@ -20,7 +20,7 @@ func main() {
 	batchSize:=30
 
 	xd,t:=ng.GetSpiral(true)
-	xm:=mat.NewDense(ut.Flatten(xd))
+	xm:=nd.NewDense(ut.Flatten(xd))
 
 	lr:=1.0
 	sgd:=ng.SGD(lr)
@@ -38,10 +38,9 @@ func main() {
 		//index:=ut.ArangeInt(0,dataSize,1)
 		for j:=0;j<maxIter;j++{
 			batchIndex:=index[j*batchSize:(j+1)*batchSize]
-			batchX:=ng.SelRow(xm,batchIndex...)
+			batchX:=xm.Rows(batchIndex...)
 			batchT:=ut.SelRowInt(t,batchIndex...)
-			x := &ng.Variable{Data: batchX}
-			y := model.Forward(x)
+			y := model.Forward(batchX)
 			loss :=ng.SoftmaxCrossEntroy(y,batchT)
 			if i==0 && j==0{
 				loss.Plot(true,"./temp/spiral.png")
@@ -50,29 +49,23 @@ func main() {
 			loss.Backward(false)
 			model.Grad2Param()
 
-			l := loss.At(0, 0)
-			sumLoss+= l *float64(len(batchT))
+			sumLoss+= loss.Var() *float64(len(batchT))
 		}
 		avgLoss:=sumLoss/float64(dataSize)
 		fmt.Printf("epoch %d loss:%4f\n",i+1,avgLoss)
 	}
 
-	x0:=ng.ColData(xm,0)
-	xmin,xmax:=ut.MinMaxFloat64Slice(x0)
-	x1:=ng.ColData(xm,1)
-	ymin,ymax:=ut.MinMaxFloat64Slice(x1)
-	h := 0.01
-	vecx := ng.NewVec(ut.Arange(xmin, xmax, h)...)
-	vecy := ng.NewVec(ut.Arange(ymin, ymax, h)...)
-	xv,yv:=ng.MeshGrid(vecx, vecy)
-	X:=ut.CrossSlice(ng.Ravel(xv.Data),ng.Ravel(yv.Data))
-	XX:=mat.NewDense(ut.Flatten(X))
-	score:=model.Forward(&ng.Variable{Data: XX})
-	//score.Print("score")
-	z:=ng.AgrMax(score,1,true)
-	z=ng.Reshape(z,xv.Shape())
-	//z.Print("Z")
-	ug:=ng.UnitGrid{xv,yv,z}
+	h := 0.005
+	xmin,xmax:=ut.MinMaxFloat64Slice(xm.ColData(0))
+	ymin,ymax:=ut.MinMaxFloat64Slice(xm.ColData(1))
+	x := nd.NewArange(xmin,xmax,h)
+	y := nd.NewArange(ymin,ymax,h)
+	xx, yy :=nd.MeshGrid(x, y)
+	X:=nd.Cross(xx, yy)
+	Y :=model.Forward(X)
+	z:= Y.Data.ArgMax(1,true)
+	zz:=z.Reshape(xx.Dims())
+	ug:=ng.UnitGrid{xx, yy,zz}
 
 	p := plot.New()
 	p.Title.Text = "Plotutil example"

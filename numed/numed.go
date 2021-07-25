@@ -17,9 +17,10 @@ func (err Error) Error() string { return err.string }
 type Float float64
 
 var(
-	ErrRowAccess           = Error{"mat: row index out of range"}
-	ErrColAccess           = Error{"mat: column index out of range"}
-	ErrColLength           = Error{"mat: col length mismatch"}
+	ErrRowAccess           = Error{"ed: row index out of range"}
+	ErrColAccess           = Error{"ed: column index out of range"}
+	ErrColLength           = Error{"ed: col length mismatch"}
+	ErrDotColRowMatch           = Error{"ed: dot x cols must equal y rows "}
 )
 
 func NewShape(r,c int)*Shape{
@@ -88,7 +89,8 @@ func NewVecInt(d... int)*NumEd{
 	}
 	return NewMat(1,c,t...)
 }
-func NewMat(r,c int,d...float64) *NumEd{
+
+func NewDense(r,c int,d []float64) *NumEd{
 	if d==nil{
 		d=make([]float64,r*c)
 	}
@@ -98,6 +100,11 @@ func NewMat(r,c int,d...float64) *NumEd{
 	ed:=&NumEd{blas64.General{Rows: r,Cols: c,Stride: c,Data: d}}
 	return ed
 }
+
+func NewMat(r,c int,d...float64) *NumEd{
+	return NewDense(r,c,d)
+}
+
 func NewEyes(n int) *NumEd{
 	d:= NewMat(n,n)
 	for i:=0;i<n;i++{
@@ -121,7 +128,8 @@ func LikeZeros(n *NumEd) *NumEd {
 	return NewMat(r,c)
 }
 
-func Add(x,y *NumEd)*NumEd{
+func Add(xi,yi interface{})*NumEd{
+	x,y:=asVar(xi),asVar(yi)
 	x,y=_checkBroadCast(x,y)
 	r,c:=x.Dims()
 	size:=r*c
@@ -131,7 +139,8 @@ func Add(x,y *NumEd)*NumEd{
 	}
 	return t
 }
-func Sub(x,y *NumEd)*NumEd{
+func Sub(xi,yi interface{})*NumEd{
+	x,y:=asVar(xi),asVar(yi)
 	x,y=_checkBroadCast(x,y)
 	r,c:=x.Dims()
 	size:=r*c
@@ -141,7 +150,8 @@ func Sub(x,y *NumEd)*NumEd{
 	}
 	return t
 }
-func Mul(x,y *NumEd)*NumEd{
+func Mul(xi,yi interface{})*NumEd{
+	x,y:=asVar(xi),asVar(yi)
 	x,y=_checkBroadCast(x,y)
 	r,c:=x.Dims()
 	size:=r*c
@@ -151,7 +161,8 @@ func Mul(x,y *NumEd)*NumEd{
 	}
 	return t
 }
-func Div(x,y *NumEd)*NumEd{
+func Div(xi,yi interface{})*NumEd{
+	x,y:=asVar(xi),asVar(yi)
 	x,y=_checkBroadCast(x,y)
 	r,c:=x.Dims()
 	size:=r*c
@@ -159,11 +170,15 @@ func Div(x,y *NumEd)*NumEd{
 	for i:=0;i<size;i++{
 		t.data.Data[i]=x.data.Data[i]/y.data.Data[i]
 	}
+
 	return t
 }
 func Dot(x,y *NumEd)*NumEd{
-	xr,_:=x.Dims()
-	_,yc:=y.Dims()
+	xr,xc:=x.Dims()
+	yr,yc:=y.Dims()
+	if xc!=yr{
+		panic(ErrDotColRowMatch)
+	}
 	t:=NewMat(xr,yc)
 	for r:=0;r<xr;r++{
 		for c:=0;c<yc;c++{
@@ -173,13 +188,21 @@ func Dot(x,y *NumEd)*NumEd{
 	}
 	return t
 }
-
+func Tanh(x *NumEd)*NumEd{
+	o:=mask(x, func(i, j int, v float64) float64 {
+		return math.Tanh(v)
+	})
+	return o
+}
+//Cross each pick from x and y ,to one r*c,2 array
 func Cross(x,y *NumEd)*NumEd{
-	xr,_:=x.Dims()
-	t:=NewMat(xr,2)
+	xr,xc:=x.Dims()
+	t:=NewMat(xr*xc,2)
 	for i:=0;i<xr;i++{
-		t.Set(i,0,x.Get(0,i))
-		t.Set(i,1,y.Get(0,i))
+		for j:=0;j<xc;j++{
+			t.Set(i*xc+j,0,x.Get(i,j))
+			t.Set(i*xc+j,1,y.Get(i,j))
+		}
 	}
 	return t
 }
@@ -192,12 +215,15 @@ func MeshGrid(x,y *NumEd)(*NumEd,*NumEd){
 	ym:=broadcastTo(y,sp)
 	return xm,ym
 }
-func Equal(x,y *NumEd) bool{
+func Equal(x,y *NumEd,e...float64) bool{
 	if x==y{
 		return true
 	}
 	xs,ys:=x.Shape(),y.Shape()
 	eps:=1e-4
+	if len(e)>0{
+		eps=e[0]
+	}
 	if xs.E(ys){
 		for i:=0;i<xs.R;i++{
 			for j:=0;j<xs.C;j++{
@@ -270,11 +296,12 @@ func (n *NumEd) RowsCol (rcs ...int)*NumEd{
 	m:=NewMat(mr,1)
 	for i,c :=range rcs {
 		f:= n.Slice(i, i+1,c,c+1)
-		t:= m.Slice(i, i+1,c,c+1)
+		t:= m.Slice(i, i+1,0,1)
 		t.Copy(f)
 	}
 	return m
 }
+
 // Cows 间隔选取整列
 func (n *NumEd) Cols (cs ...int)*NumEd{
 	mc:=len(cs)
@@ -298,8 +325,29 @@ func (n *NumEd) ColsRow (crs ...int)*NumEd{
 	}
 	return m
 }
+func (n *NumEd) ColData(c int) []float64{
+	xr,_:=n.Dims()
+	m:=NewMat(xr,1)
+	for i:=0;i<xr;i++{
+		m.Set(i,0,n.Get(i,c))
+	}
+	return m.data.Data
+}
+func (n *NumEd) RowData(r int) []float64{
+	_,xc:=n.Dims()
+	m:=NewMat(1,xc)
+	for i:=0;i<xc;i++{
+		m.Set(0,i,n.Get(r,i))
+	}
+	return m.data.Data
+}
+
 func (n *NumEd) T()*NumEd{
 	return n.tranposeTo()
+}
+func (n *NumEd)Print(name string) {
+	s:=n.Sprint(name)
+	fmt.Print(s)
 }
 func (n *NumEd)Sprint(name string) string {
 	s:=fmt.Sprintf("%s\n%s\n",name, sprintNumEd(n))
@@ -334,11 +382,90 @@ func (n *NumEd) ArgMax(axis interface{},keepDims bool)*NumEd{
 func (n *NumEd) Sum(axis interface{},keepDims bool)*NumEd{
 	return _sum(n,axis,keepDims)
 }
+func (n *NumEd) Mean() *NumEd{
+	r,c:=n.Dims()
+	size:=r*c
+	sum:=n.Sum(nil,true)
+	avg := sum.Var() / float64(size)
+	return NewVar(avg)
+}
+
+func (n *NumEd) Neg()*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		return -v
+	})
+	return o
+}
+
+func (n *NumEd) Exp()*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		return math.Exp(v)
+	})
+	return o
+}
+func (n *NumEd) Pow(y int)*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		return math.Pow(v,float64(y))
+	})
+	return o
+}
+func (n *NumEd) Sin()*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		return math.Sin(v)
+	})
+	return o
+}
+func (n *NumEd) Cos()*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		return math.Cos(v)
+	})
+	return o
+}
+func (n *NumEd) Log()*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		return math.Log(v)
+	})
+	return o
+}
+func (n *NumEd) Tanh()*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		return math.Tanh(v)
+	})
+	return o
+}
+func (n *NumEd) Sqrt()*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		return math.Sqrt(v)
+	})
+	return o
+}
+
+func (n *NumEd) Clip(min,max float64)*NumEd{
+	o:=mask(n, func(i, j int, v float64) float64 {
+		if v>=max{
+			return max
+		}
+		if v<=min{
+			return min
+		}
+		return v
+	})
+	return o
+}
+
 func (n *NumEd) Mask(cond EachFunc)*NumEd{
 	return mask(n,cond)
 }
 
+func (n *NumEd)  Reshape(r,c int)*NumEd{
+	o:=NewMat(r,c,n.data.Data...)
+	return o
+}
+func (n *NumEd) BroadcastTo(s *Shape)*NumEd{
+	return broadcastTo(n,s)
+}
 //---------utils
+
 func mask(x *NumEd,cond EachFunc)*NumEd{
 	xr,xc:=x.Dims()
 	t:=LikeZeros(x)
@@ -357,12 +484,13 @@ func sprintNumEd(x *NumEd) string {
 	c:=make([]string,xc)
 	for i:=0;i<xr;i++{
 		for j:=0;j<xc;j++{
-			c[j]=fmt.Sprintf("%v",x.get(i,j))
+			c[j]=fmt.Sprintf("%.12f",x.get(i,j))
 		}
-		r[i]=fmt.Sprintf(" %s",strings.Join(c," "))
+		r[i]=fmt.Sprintf("    %s",strings.Join(c," "))
 	}
 	return strings.Join(r,"\n")
 }
+
 
 func _checkBroadCast(x0 *NumEd, x1 *NumEd) (*NumEd, *NumEd) {
 	x0s,x1s:=x0.Shape(),x1.Shape()

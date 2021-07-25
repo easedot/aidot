@@ -15,8 +15,8 @@ import (
 )
 func AsVar(v interface{}) *Variable{
 	switch v.(type) {
-	case *mat.Dense:
-		return &Variable{Data: v.(*mat.Dense)}
+	case *nd.NumEd:
+		return &Variable{Data: v.(*nd.NumEd)}
 	case float64:
 		return NewVar(v.(float64))
 	case *Variable:
@@ -39,44 +39,43 @@ func _where(x,y *Variable,cond condFunc) *Variable{
 	return y
 }
 
-func _sumToR(x *Variable) *Variable{
-	xs:=x.Shape()
-	xr,xc:=xs.R,xs.C
-	b:=mat.Dense{}
-	y:=b.Grow(1,xc).(*mat.Dense)
-	for ir:=0;ir<xr;ir++{
-		w := x.Data.Slice(ir, ir+1, 0, xc).(*mat.Dense)
-		for c := 0; c < xc; c++ {
-			y.Set(0, c, w.At(0, c)+y.At(0, c))
-		}
-	}
-	return &Variable{Data:y}
-}
-func _sumToC(x * Variable) *Variable{
-	xs:=x.Shape()
-	xr,xc:=xs.R,xs.C
-	b:=mat.Dense{}
-	y:=b.Grow(xr,1).(*mat.Dense)
-	for ic:=0;ic<xc;ic++{
-		w := x.Data.Slice(0, xr, ic, ic+1).(*mat.Dense)
-		for r := 0; r < xr; r++ {
-			y.Set(r, 0, w.At(r, 0)+y.At(r, 0))
-		}
-	}
-	return &Variable{Data:y}
-}
+//func _sumToR(x *Variable) *Variable{
+//	xs:=x.Shape()
+//	xr,xc:=xs.R,xs.C
+//	b:=mat.Dense{}
+//	y:=b.Grow(1,xc).(*mat.Dense)
+//	for ir:=0;ir<xr;ir++{
+//		w := x.Data.Slice(ir, ir+1, 0, xc).(*mat.Dense)
+//		for c := 0; c < xc; c++ {
+//			y.Set(0, c, w.At(0, c)+y.At(0, c))
+//		}
+//	}
+//	return &Variable{Data:y}
+//}
+//func _sumToC(x * Variable) *Variable{
+//	xs:=x.Shape()
+//	xr,xc:=xs.R,xs.C
+//	b:=mat.Dense{}
+//	y:=b.Grow(xr,1).(*mat.Dense)
+//	for ic:=0;ic<xc;ic++{
+//		w := x.Data.Slice(0, xr, ic, ic+1).(*mat.Dense)
+//		for r := 0; r < xr; r++ {
+//			y.Set(r, 0, w.At(r, 0)+y.At(r, 0))
+//		}
+//	}
+//	return &Variable{Data:y}
+//}
 
 func _sumTo(x *Variable,s *nd.Shape)*Variable{
-	y:=x
+	y:=NewMat(s.R,s.C)
 	if s.R==1 && s.C==1{
-		s:=mat.Sum(x.Data)
-		y= NewVar(s)
+		y.Data= x.Data.Sum(nil,true)
 	}
 	if s.R==1 && s.C!=1{
-		y=_sumToR(x)
+		y.Data=x.Data.Sum(0,true)
 	}
 	if s.C==1 && s.R!=1{
-		y=_sumToC(x)
+		y.Data=x.Data.Sum(1,true)
 	}
 	return y
 }
@@ -118,29 +117,16 @@ func _maxBackwardShape(x *Variable,axis interface{})[]int{
 }
 
 func _eyes(n int)*Variable{
-	d:=ut.Eyes(n)
+	d:=nd.NewEyes(n)
 	return &Variable{Data: d}
 }
 
 func _sum(x *Variable,axis interface{},keepDims bool)*Variable{
-	sumF:=func(x,y,iy *mat.Dense,r,c,idx int){
-		yv := y.At(r, c)
-		xv := x.At(r, c)
-		y.Set(r, c, xv+yv)
-	}
-	y,_ := _rowColSet(x.Data, sumF, axis, keepDims)
+	y:= x.Data.Sum(axis,keepDims)
 	return &Variable{Data:y}
 }
 func _min(x *Variable,axis interface{},keepDims bool)*Variable{
-	minF:=func(x,y,iy *mat.Dense,r,c,idx int){
-		xv := x.At(r, c)
-		yv := y.At(r, c)
-		//这里要注意y是初始全零状态，所以做最小比较要特殊处理
-		if xv<yv||yv==0{
-			y.Set(r, c, xv)
-		}
-	}
-	y,_ := _rowColSet(x.Data, minF, axis, keepDims)
+	y:= x.Data.Min(axis,keepDims)
 	return &Variable{Data:y}
 }
 
@@ -149,87 +135,18 @@ func AgrMax(x *Variable,axis int,keepDims bool)*Variable{
 }
 
 func _agrMax(x *Variable,axis int,keepDims bool)*Variable{
-	maxF:=func(x,y,iy *mat.Dense,r,c,idx int){
-		xv := x.At(r, c)
-		yv := y.At(r, c)
-		if xv>yv{
-			y.Set(r, c, xv)
-			iy.Set(r, c, float64(idx))
-		}
-	}
-	_,iy:= _rowColSet(x.Data, maxF, axis, keepDims)
-	return &Variable{Data:iy}
+	y:=x.Data.ArgMax(axis,keepDims)
+	return &Variable{Data:y}
 }
 func _max(x *Variable,axis interface{},keepDims bool)*Variable{
-	maxF:=func(x,y,iy *mat.Dense,r,c,idx int){
-		xv := x.At(r, c)
-		yv := y.At(r, c)
-		if xv>yv{
-			y.Set(r, c, xv)
-		}
-	}
-	y,_ := _rowColSet(x.Data, maxF, axis, keepDims)
+	y:= x.Data.Max(axis, keepDims)
 	return &Variable{Data:y}
 }
 
 type RowColFunc func(x,y,iy *mat.Dense,r,c,idx int)
 
-func _rowColSet(x *mat.Dense,f RowColFunc,axis interface{},keepDims bool)(*mat.Dense,*mat.Dense){
-	xr,xc:=x.Dims()
-	b:=mat.Dense{}
-	idx:=mat.Dense{}
-	if axis==nil{
-		yr:=b.Grow(1,xc).(*mat.Dense)
-		idxr := b.Grow(1, xc).(*mat.Dense)
-		_eachRow(x, f, yr,idxr)
-		ya := b.Grow(1, 1).(*mat.Dense)
-		idxa := b.Grow(1, 1).(*mat.Dense)
-		_eachCol(yr, f, ya,idxa)
-		return ya,idxa
-	}
-	if axis.(int)==0{
-		y:=b.Grow(1,xc).(*mat.Dense)
-		idx:=b.Grow(1,xc).(*mat.Dense)
-		_eachRow(x, f, y,idx)
-		return y,idx
-	}
-	if axis.(int)==1 {
-		y := b.Grow(xr, 1).(*mat.Dense)
-		idx := b.Grow(xr, 1).(*mat.Dense)
-		_eachCol(x, f, y,idx)
-		return y,idx
-	}
-	return &b,&idx
-}
-
-func _eachCol(x *mat.Dense, f RowColFunc, y,iy *mat.Dense) {
-	xr,xc:=x.Dims()
-	for ic := 0; ic < xc; ic++ {
-		w := x.Slice(0, xr, ic, ic+1).(*mat.Dense)
-		for r := 0; r < xr; r++ {
-			f(w, y,iy, r, 0,ic)
-		}
-	}
-}
-
-func _eachRow(x *mat.Dense, f RowColFunc, y,iy *mat.Dense) {
-	xr,xc:=x.Dims()
-	for ir := 0; ir < xr; ir++ {
-		w := x.Slice(ir, ir+1, 0, xc).(*mat.Dense)
-		for c := 0; c < xc; c++ {
-			f(w, y,iy, 0, c,ir)
-		}
-	}
-}
 func OneHot(x *Variable,rs []int )*Variable{
-	_,xc:=x.Data.Dims()
-	r:=len(rs)
-	m:=mat.NewDense(r,xc,nil)
-	for ir := 0; ir < r; ir++ {
-		vi:=rs[ir]
-		w := m.Slice(ir, ir+1, 0, xc).(*mat.Dense)
-		w.Copy(x.Data.Slice(vi,vi+1,0,xc))
-	}
+	m:=x.Data.Rows(rs...)
 	return &Variable{Data: m}
 }
 func SelRow(x *mat.Dense,rs...int)*mat.Dense{
@@ -237,9 +154,9 @@ func SelRow(x *mat.Dense,rs...int)*mat.Dense{
 	_,xc:=x.Dims()
 	m:=mat.NewDense(mr,xc,nil)
 	for i,r :=range rs{
-		w := x.Slice(r, r+1, 0, xc).(*mat.Dense)
+		from := x.Slice(r, r+1, 0, xc).(*mat.Dense)
 		mw:= m.Slice(i,i+1,0,xc).(*mat.Dense)
-		mw.Copy(w)
+		mw.Copy(from)
 	}
 	return m
 }
@@ -263,14 +180,7 @@ func SelRowCol(x *mat.Dense,rs...int)*mat.Dense{
 }
 
 func _tranposeTo(x *Variable)*Variable{
-	xs:=x.Shape()
-	t:=mat.Dense{}
-	y:=t.Grow(xs.C,xs.R).(*mat.Dense)
-	for i:=0;i<xs.R;i++ {
-		for j:=0;j<xs.C;j++{
-			y.Set(j,i,x.Data.At(i,j))
-		}
-	}
+	y:=x.Data.T()
 	return &Variable{Data:y}
 }
 
@@ -300,34 +210,7 @@ func MeshGrid(x,y *Variable)(*Variable,*Variable){
 }
 
 func _broadcastTo(x *Variable,s *nd.Shape) *Variable{
-	xs:=x.Shape()
-	xr,xc:=xs.R,xs.C
-	b:=mat.Dense{}
-	y:=b.Grow(s.R,s.C).(*mat.Dense)
-	if s.BA(xs){
-		//col
-		for ic:=0;ic<s.C;ic+=xc{
-			w := y.Slice(0, xr, ic, ic+xc).(*mat.Dense)
-			w.Copy(x.Data)
-		}
-		wc:=y.Slice(0,1,0,s.C)
-		//row
-		for ir:=0;ir<s.R;ir+=xr{
-			w := y.Slice(ir, ir+xr, 0, s.C).(*mat.Dense)
-			w.Copy(wc)
-		}
-		return &Variable{Data:y}
-	} else if s.BR(xs){
-		for ir:=0;ir<s.R;ir+=xr{
-			w := y.Slice(ir, ir+xr, 0, xc).(*mat.Dense)
-			w.Copy(x.Data)
-		}
-	} else if s.BC(xs){
-		for ic:=0;ic<s.C;ic+=xc{
-			w := y.Slice(0, xr, ic, ic+xc).(*mat.Dense)
-			w.Copy(x.Data)
-		}
-	}
+	y:=x.Data.BroadcastTo(s)
 	return &Variable{Data:y}
 }
 func _checkBroadCast(x0s *nd.Shape, x1s *nd.Shape, x0 *Variable, x1 *Variable) (*Variable, *Variable) {
@@ -360,7 +243,7 @@ func _checkSumTo(x0s *nd.Shape, x1s *nd.Shape, gx0 *Variable, gx1 *Variable) (*V
 
 func NumericalDiff(f func(i *Variable) *Variable,x *Variable) * Variable {
 	eps:=1e-6
-	grad:=ut.LikeZeros(x.Data)
+	grad:=  nd.LikeZeros(x.Data)
 	xs:=x.Shape()
 	for i:=0;i<xs.R;i++ {
 		for j:=0;j<xs.C;j++{
@@ -375,7 +258,7 @@ func NumericalDiff(f func(i *Variable) *Variable,x *Variable) * Variable {
 			diffV := diff.Data.At(0, 0)
 			g := diffV / (2.0 * eps)
 			//这里处理max，min的特殊情况，如果3-eps,但是y没有减小，因为max返回最大值了
-			if mat.Equal(y1.Data,y3.Data) || mat.Equal(y2.Data,y3.Data){
+			if nd.Equal(y1.Data,y3.Data,1e-8) || nd.Equal(y2.Data,y3.Data,1e-8){
 			//if mat.EqualApprox(y1.Data,y3.Data,1e-8) || mat.EqualApprox(y2.Data,y3.Data,1e-8){
 				g = diffV / (1.0 * eps)
 			}

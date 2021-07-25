@@ -6,10 +6,10 @@ import (
 	"image/color"
 	"math/rand"
 
-	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
+	nd "test_ai/numed"
 	ng "test_ai/numgo"
 )
 
@@ -55,14 +55,8 @@ func main() {
 		loss.Backward(false)
 
 		//更新参数不使用连接图，直接修改data
-		wb:=&mat.Dense{}
-		wb.MulElem(lr.Data,W.Grad.Data)
-		W.Data.Sub(W.Data,wb)
-
-		bb:=&mat.Dense{}
-		bb.MulElem(lr.Data,b.Grad.Data)
-		b.Data.Sub(b.Data,bb)
-
+		W.Data=nd.Sub(W.Data,nd.Mul(W.Grad.Data,lr.Data))
+		b.Data=nd.Sub(b.Data,nd.Mul(b.Grad.Data,lr.Data))
 		fmt.Println(i,loss.Sprint("loss"),W.Sprint("w"),b.Sprint("b"))
 		if loss.At(0,0)<0.1{
 			break

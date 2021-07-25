@@ -1,7 +1,6 @@
 package numgo
 
 import (
-	"gonum.org/v1/gonum/mat"
 	nd "test_ai/numed"
 	ut "test_ai/utils"
 )
@@ -17,11 +16,10 @@ type sinFunc struct {
 }
 func (s *sinFunc) forward(i []*Variable) []*Variable  {
 	x:=i[0]
-	y:=ut.LikeZeros(x.Data)
-	y.Apply(ut.SinFunc,x.Data)
+	y:=x.Data.Sin()
 	return []*Variable{{Data:y}}
 }
-func (s *sinFunc) backward(i,o,gy []*Variable) []*Variable  {
+func (s *sinFunc) backward(i,_,gy []*Variable) []*Variable  {
 	x:=i[0]
 	g:=gy[0]
 	y:=Mul(Cos(x),g)
@@ -38,11 +36,10 @@ type cosFunc struct {
 }
 func (s *cosFunc) forward(i []*Variable) []*Variable  {
 	x:=i[0]
-	y:=ut.LikeZeros(x.Data)
-	y.Apply(ut.CosFunc,x.Data)
+	y:=x.Data.Cos()
 	return []*Variable{{Data:y}}
 }
-func (s *cosFunc) backward(i,o,gy []*Variable) []*Variable  {
+func (s *cosFunc) backward(i,_,gy []*Variable) []*Variable  {
 	x:=i[0]
 	g:=gy[0]
 	y:=Mul(g,Neg(Sin(x)))
@@ -59,11 +56,10 @@ type tanhFunc struct {
 }
 func (s *tanhFunc) forward(i []*Variable) []*Variable  {
 	x:=i[0]
-	y:=ut.LikeZeros(x.Data)
-	y.Apply(ut.TanghFunc,x.Data)
+	y:=x.Data.Tanh()
 	return []*Variable{{Data:y}}
 }
-func (s *tanhFunc) backward(i,o,gy []*Variable) []*Variable  {
+func (s *tanhFunc) backward(_,o,gy []*Variable) []*Variable  {
 	y:=o[0]
 	g:=gy[0]
 	gx:=Mul(g,Neg(Sub(NewVar(1),Mul(y,y))))
@@ -85,9 +81,9 @@ type reshapeFunc struct {
 func (s *reshapeFunc) forward(ix[]*Variable)[]*Variable {
 	x:=ix[0]
 	s.Xs=x.Shape()
-	return []*Variable{{Data:mat.NewDense(s.S.R, s.S.C, x.Data.RawMatrix().Data)}}
+	return []*Variable{{Data:x.Data.Reshape(s.S.R,s.S.C)}}
 }
-func (s *reshapeFunc) backward(i,o,gy []*Variable)[]*Variable {
+func (s *reshapeFunc) backward(_,_,gy []*Variable)[]*Variable {
 	return []*Variable{Reshape(gy[0],s.Xs)}
 }
 
@@ -103,7 +99,7 @@ func (t *transposeFunc) forward(ix[]*Variable)[]*Variable{
 	x:=ix[0]
 	return []*Variable{_tranposeTo(x)}
 }
-func (t *transposeFunc) backward(i,o,gy []*Variable)[]*Variable{
+func (t *transposeFunc) backward(_,_,gy []*Variable)[]*Variable{
 	y:=gy[0]
 	return []*Variable{Transpose(y)}
 }
@@ -118,10 +114,9 @@ type expFunc struct {
 func (e *expFunc)forward(i []*Variable) []*Variable  {
 	//todo 这里不能使用dense的计算，因为gonum要求方形矩阵？
 	x:=i[0]
-	x.Data.Apply(ut.ExpFunc,x.Data)
-	return [] *Variable{{Data:x.Data}}
+	return [] *Variable{{Data:x.Data.Exp()}}
 }
-func (e *expFunc)backward(i,o, gy []*Variable) []*Variable {
+func (e *expFunc)backward(_,o, gy []*Variable) []*Variable {
 	y:=o[0]
 	g:=gy[0]
 	gx:= Mul(g,y)
@@ -140,8 +135,8 @@ type sumFunc struct {
 func (s *sumFunc) forward(ix[]*Variable)[]*Variable{
 	x:=ix[0]
 	s.Xs=x.Shape()
-	y:=mat.Sum(x.Data)
-	r:=NewVar(y)
+	y:=x.Data.Sum(nil,true)
+	r:=NewVar(y.Var())
 	return []*Variable{r}
 }
 func (s *sumFunc) backward(i,o,gy []*Variable)[]*Variable{
@@ -207,9 +202,8 @@ type matMulFunc struct {
 }
 func (s *matMulFunc) forward(ix[]*Variable)[]*Variable{
 	x,W:=ix[0],ix[1]
-	y:=mat.Dense{}
-	y.Mul(x.Data,W.Data)
-	return []*Variable{{Data: &y}}
+	y:=nd.Dot(x.Data,W.Data)
+	return []*Variable{{Data: y}}
 }
 func (s *matMulFunc) backward(i,o,gy []*Variable)[]*Variable{
 	x,W:=i[0],i[1]
@@ -226,15 +220,17 @@ type linearFunc struct {
 
 func (l *linearFunc) forward(ix[]*Variable)[]*Variable{
 	x,W:=ix[0],ix[1]
-	y:= Matmul(x,W)
+	y:= nd.Dot(x.Data,W.Data)
+
 	var b *Variable
 	if len(ix)>2{
 		b=ix[2]
 	}
 	if b!=nil{
-		y= Add(y,b)
+		y= nd.Add(y,b.Data)
 	}
-	return []*Variable{y}
+	v:=&Variable{Data: y}
+	return []*Variable{v}
 }
 
 func (l *linearFunc) backward(is, os, gys []*Variable)[]*Variable{
@@ -267,13 +263,16 @@ type sigmoid struct {
 
 func (s *sigmoid) forward(ix []*Variable) []*Variable {
 	x:=ix[0]
-	y:=Add(Mul(Tanh(Mul(x,0.5)),0.5),0.5)
-	return []*Variable{y}
+	//other
+	//y:=nd.Add(nd.Mul(nd.Mul(x.Data,0.5).Tanh(),0.5),0.5)
+	y:=nd.Add(nd.Mul(nd.Tanh(nd.Mul(x.Data,0.5)),0.5),0.5)
+	v:=&Variable{Data: y}
+	return []*Variable{v}
 }
 func (s *sigmoid) backward(is,os,gys []*Variable) []*Variable {
 	y:=os[0]
 	gy:=gys[0]
-	gx :=Mul(Mul(gy,y),Sub(NewVar(1),y))
+	gx :=Mul(Mul(gy,y),Sub(1,y))
 	return []*Variable{gx}
 }
 func Sigmoid(x *Variable)*Variable  {
@@ -286,9 +285,10 @@ type meanSquaredError struct {
 }
 func (m *meanSquaredError) forward(ix []*Variable) []*Variable {
 	x0,x1:=ix[0],ix[1]
-	diff:=Sub(x0,x1)
-	y:=Div(Sum(Mul(diff,diff)),diff.Shape().R)
-	return []*Variable{y}
+	diff:=nd.Sub(x0.Data,x1.Data)
+	y:=nd.Div(diff.Pow(2).Sum(nil,true),diff.Shape().R)
+	v:=&Variable{Data: y}
+	return []*Variable{v}
 }
 func (m *meanSquaredError) backward(is,os,gys []*Variable) []*Variable {
 	gy:=gys[0]
@@ -304,8 +304,8 @@ func MeanSquaredError(x0,x1 *Variable)*Variable{
 	return f.Run(x0,x1)
 }
 func Softmax1d(x *Variable)*Variable {
-	y := Exp(x)
-	sumY := _sumToC(y)
+	y := x.Data.Exp()
+	sumY := y.Sum(1,true)
 	return Div(y, sumY)
 }
 
@@ -322,17 +322,16 @@ func Softmax_cross_entropy_simple(x *Variable,t[]int)float64{
 
 func Accuracy(y interface{},t[]int) *Variable{
 	yv:=AsVar(y)
-	eq:= func(x,y*Variable,r,c int) {
-		if x.At(r,c)==y.At(r,c){
-			y.Data.Set(r,c,1)
-		}else{
-			y.Data.Set(r,c,0)
-		}
-	}
 	tv:=NewVecInt(t...)
-	pred:=_agrMax(yv,1,true)
-	mask:= _where(pred,tv,eq)
-	return NewVar(mask.Mean())
+	pred:=yv.Data.ArgMax(1,true).Reshape(tv.Data.Dims())
+	mask:= pred.Mask(func(i, j int, v float64) float64 {
+		if v==tv.Data.Get(i,j){
+			return 1.0
+		}else{
+			return 0.0
+		}
+	})
+	return NewVar(mask.Mean().Var())
 }
 
 func SoftmaxCrossEntroy(x interface{},t[]int) *Variable{
@@ -347,13 +346,12 @@ type softmaxCrossEntropy struct {
 }
 func (s *softmaxCrossEntropy) forward(is []*Variable) []*Variable {
 	x:=is[0]
-	N:=x.Shape().R
+	N,_:=x.Data.Dims()
 	logZ:=_logsumexp(x,1)
-	logP:=Sub(x,logZ)
-	logPd:=SelRowCol(logP.Data,s.t...) //Getitem(logP,ut.ArangeInt(0,N,1),s.t)
-	logP.Data=logPd
-	sum:=Neg(Sum(logP))
-	y:= sum.At(0,0)/float64(N)
+	logP:=nd.Sub(x.Data,logZ.Data) //Sub(x,logZ)
+	logP=logP.RowsCol(s.t...) // SelRowCol(logP.Data,s.t...) //Getitem(logP,ut.ArangeInt(0,N,1),s.t)
+	sum:=logP.Sum(nil,true).Neg()
+	y:= sum.Var()/float64(N)
 	return []*Variable{NewVar(y)}
 }
 func (s *softmaxCrossEntropy) backward(is,os,gys []*Variable) []*Variable {
@@ -459,7 +457,7 @@ type GetItemGrad struct {
 
 
 func Log(x *Variable)*Variable{
-	x.Data.Apply(ut.LogFunc,x.Data)
+	x.Data=x.Data.Log()
 	return x
 }
 
@@ -474,25 +472,15 @@ type clipFunc struct {
 	Function
 	max,min float64
 }
-func (self *clipFunc) forward(is []*Variable) []*Variable {
-	var maxMinFunc=func(_,_ int,v float64) float64{
-		if v<= self.min{
-			return self.min
-		}
-		if v>= self.max{
-			return self.max
-		}
-		return v
-	}
+func (cp *clipFunc) forward(is []*Variable) []*Variable {
 	x:=is[0]
-	y:=mat.Dense{}
-	y.Apply(maxMinFunc,x.Data)
-	return [] *Variable{{Data:&y}}
+	y:=x.Data.Clip(cp.min, cp.max)
+	return [] *Variable{{Data:y}}
 }
-func (self *clipFunc) backward(is,os,gys []*Variable) []*Variable {
+func (cp *clipFunc) backward(is,os,gys []*Variable) []*Variable {
 	eq:= func(x,y*Variable,r,c int) {
 		xv := x.At(r, c)
-		if xv >=self.min && xv <=self.max {
+		if xv >= cp.min && xv <= cp.max {
 			y.Data.Set(r,c,1)
 		}else{
 			y.Data.Set(r,c,0)
@@ -500,7 +488,7 @@ func (self *clipFunc) backward(is,os,gys []*Variable) []*Variable {
 	}
 	gy:=gys[0]
 	x:=is[0]
-	mask:=&Variable{Data:ut.LikeZeros(x.Data)}
+	mask:=&Variable{Data:nd.LikeZeros(x.Data)}
 	_where(x,mask,eq)
 	gx:=Mul(gy,mask)
 	return [] *Variable{gx}

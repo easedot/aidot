@@ -56,10 +56,12 @@ type linearLayer struct {
 	I,O int
 }
 func (l *linearLayer) initW(){
-	var InitWFunc=func(_,_ int,v float64) float64{return v*math.Sqrt(1/float64(l.I))}
+	var InitWFunc=func(_,_ int,v float64) float64{
+		return v*math.Sqrt(1/float64(l.I))
+	}
 	//var InitWFunc=func(_,_ int,v float64) float64{return v*0.01}
 	w := NewRandN(l.I, l.O)
-	w.Data.Apply(InitWFunc,w.Data)
+	w.Data.Apply(InitWFunc)
 	l.W.Data=w.Data
 }
 func (l *linearLayer) getParams()map[string]*Variable{

@@ -3,7 +3,7 @@ package numgo
 import (
 	"testing"
 
-	"gonum.org/v1/gonum/mat"
+	nd "test_ai/numed"
 )
 
 func TestAdd (t *testing.T){
@@ -22,7 +22,7 @@ func TestAdd (t *testing.T){
 	testFunc:= Add
 	for _,test :=range tests{
 		got:=testFunc(test.x0,test.x1)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -35,10 +35,10 @@ func TestAdd (t *testing.T){
 			return testFunc(test.x0, i)
 		}, test.x1)
 
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
-		if !mat.EqualApprox(g1.Data,dc1.Data,1e-4){
+		if !nd.Equal(g1.Data,dc1.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g1.Sprint("g1"),dc1.Sprint("wg1"))
 		}
 
@@ -60,7 +60,7 @@ func TestSub (t *testing.T){
 	testFunc := Sub
 	for _,test :=range tests{
 		got:= testFunc(test.x0,test.x1)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -74,10 +74,10 @@ func TestSub (t *testing.T){
 			return testFunc(test.x0, i)
 		}, test.x1)
 
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
-		if !mat.EqualApprox(g1.Data,dc1.Data,1e-4){
+		if !nd.Equal(g1.Data,dc1.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g1.Sprint("g1"),dc1.Sprint("wg1"))
 		}
 
@@ -99,7 +99,7 @@ func TestMul(t *testing.T){
 	testFunc := Mul
 	for _,test :=range tests{
 		got:= testFunc(test.x0,test.x1)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -110,10 +110,10 @@ func TestMul(t *testing.T){
 		dc1:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(test.x0,i)
 		}, test.x1)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
-		if !mat.EqualApprox(g1.Data,dc1.Data,1e-4){
+		if !nd.Equal(g1.Data,dc1.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g1.Sprint("g1"),dc1.Sprint("wg1"))
 		}
 
@@ -136,7 +136,7 @@ func TestDiv(t *testing.T){
 	for _,test :=range tests{
 		testFunc := Div
 		got:= testFunc(test.x0,test.x1)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -147,10 +147,10 @@ func TestDiv(t *testing.T){
 		dc1:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(test.x0,i)
 		}, test.x1)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
-		if !mat.EqualApprox(g1.Data,dc1.Data,1e-4){
+		if !nd.Equal(g1.Data,dc1.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g1.Sprint("g1"),dc1.Sprint("wg1"))
 		}
 
@@ -170,7 +170,7 @@ func TestMatmul(t *testing.T){
 	testFunc:=Matmul
 	for _,test :=range tests{
 		got:=testFunc(test.x0,test.x1)
-		if !mat.Equal(got.Data,test.want.Data){
+		if nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -181,10 +181,10 @@ func TestMatmul(t *testing.T){
 		dc1:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(test.x0,i)
 		}, test.x1)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
-		if !mat.EqualApprox(g1.Data,dc1.Data,1e-4){
+		if !nd.Equal(g1.Data,dc1.Data){
 			t.Errorf("\n %s %s %s %s",test.x0.Sprint("x0"),test.x1.Sprint("x1"),g1.Sprint("g1"),dc1.Sprint("wg1"))
 		}
 	}
@@ -203,7 +203,7 @@ func TestLinear(t *testing.T){
 	testFunc:= Linear
 	for _,test :=range tests{
 		got:=testFunc(test.x,test.W,test.b)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n %s %s %s %s",test.x.Sprint("x0"),test.W.Sprint("x1"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -215,13 +215,12 @@ func TestLinear(t *testing.T){
 		dc1:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(test.x,i,test.b)
 		}, test.W)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n %s %s %s %s",test.x.Sprint("x0"),test.W.Sprint("x1"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
-		if !mat.EqualApprox(g1.Data,dc1.Data,1e-4){
+		if !nd.Equal(g1.Data,dc1.Data){
 			t.Errorf("\n %s %s %s %s",test.x.Sprint("x0"),test.W.Sprint("x1"),g1.Sprint("g1"),dc1.Sprint("wg1"))
 		}
 	}
-
 }
 

@@ -3,7 +3,7 @@ package numgo
 import (
 	"math/rand"
 
-	"gonum.org/v1/gonum/mat"
+	nd "test_ai/numed"
 	ut "test_ai/utils"
 )
 
@@ -34,15 +34,23 @@ func (d *DataLoader) reset() {
 	}
 }
 func (d *DataLoader) HasNext() bool {
-	return d.iteration<d.maxIter
+	if d.iteration<d.maxIter{
+		return true
+	}else{
+		d.reset()
+		return false
+	}
 }
-func (d *DataLoader) Next() (x *mat.Dense,t []int){
-	i,batchSize:= d.iteration,d.batchSize
-	batchIndex:=d.index[i*batchSize:(i+1)*batchSize]
-	x=SelRow(d.dataSet.Data,batchIndex...)
-	//todo change
-	t=ut.SelRowInt(d.dataSet.Label,batchIndex...)
-	return x,t
+func (d *DataLoader) Next() (x *nd.NumEd,t []int){
+	batchIndex:=d.index[d.iteration*d.batchSize :(d.iteration+1)*d.batchSize]
+	xf,tf:=make([][]float64, d.batchSize),make([]int, d.batchSize)
+	for i,r:=range batchIndex{
+		xt,tt:=d.dataSet.Get(r)
+		xf[i]=xt
+		tf[i]=tt
+	}
+	d.iteration+=1
+	return nd.NewDense(ut.Flatten(xf)),tf
 }
 func (d *DataLoader) ToGpu() {
 	d.gpu=true

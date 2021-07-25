@@ -3,8 +3,7 @@ package numgo
 import (
 	"math"
 
-	"gonum.org/v1/gonum/mat"
-	ut "test_ai/utils"
+	nd "test_ai/numed"
 )
 
 type ActiveFunc func(x *Variable)*Variable
@@ -93,9 +92,7 @@ type sGD struct {
 	apply Apply
 }
 func (s sGD) updateGrad(v *Variable) {
-	wt:=mat.Dense{}
-	wt.Apply(s.apply,v.Grad.Data)
-	v.Data.Sub(v.Data,&wt)
+	v.Data=nd.Sub(v.Data,nd.Mul(s.Lr,v.Grad.Data))
 }
 
 
@@ -119,8 +116,8 @@ type aDam struct {
 	alpha,beta1,beta2,eps float64
 	ms map[*Variable]*Variable
 	vs map[*Variable]*Variable
-	applyLr Apply
-	applySqrt Apply
+	applyLr nd.EachFunc
+	applySqrt nd.EachFunc
 }
 
 func (a *aDam) Lr() float64 {
@@ -131,15 +128,14 @@ func (a *aDam) Lr() float64 {
 func (a *aDam) updateGrad(param *Variable) {
 	a.t+=1
 	if _,ok:=a.ms[param];!ok{
-		a.ms[param]=&Variable{Data:ut.LikeZeros(param.Data)}
-		a.vs[param]=&Variable{Data:ut.LikeZeros(param.Data)}
+		a.ms[param]=&Variable{Data:nd.LikeZeros(param.Data)}
+		a.vs[param]=&Variable{Data:nd.LikeZeros(param.Data)}
 	}
-	m, v :=a.ms[param],a.vs[param]
-	g:=param.Grad
-	m=Add(m,Mul(NewVar(1-a.beta1),Sub(g,m)))
-	v=Add(v,Mul(NewVar(1+a.beta2),Sub(Mul(g,g),v)))
-	m.Data.Apply(a.applyLr,m.Data)
-	v.Data.Apply(a.applySqrt,v.Data)
-
-	param.Data=Sub(param,Div(m,v)).Data
+	m, v :=a.ms[param].Data,a.vs[param].Data
+	g:=param.Grad.Data
+	m=nd.Add(m,nd.Mul(1-a.beta1,nd.Sub(g,m)))
+	v=nd.Add(v,nd.Mul(1+a.beta2,nd.Sub(nd.Mul(g,g),v)))
+	m.Apply(a.applyLr)
+	v.Apply(a.applySqrt)
+	param.Data=nd.Sub(param.Data,nd.Div(m,v))
 }

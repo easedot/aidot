@@ -8,17 +8,16 @@ import (
 )
 
 func main() {
-	maxEpoch:=5
+	maxEpoch:=300
 	batchSize:=30
 	lr:=1.0
 	sgd:=ng.SGD(lr)
-	model:=ng.MLP(ng.Sigmoid, sgd,  100, 10)
+	model:=ng.MLP(ng.Sigmoid, sgd,  10, 3)
 
-	trainSet := ng.Mnist(true)
+	trainSet := ng.Spiral(true)
 	trainLen :=float64(trainSet.Len())
-	testSet:=ng.Mnist(false)
+	testSet:=ng.Spiral(false)
 	testLen :=float64(testSet.Len())
-
 	trainLoader :=ng.NewDataLoader(trainSet,batchSize,true)
 	testLoader:=ng.NewDataLoader(testSet,batchSize,false)
 
@@ -36,8 +35,6 @@ func main() {
 			l := float64(len(dt))
 			sumLoss+= loss.Var() * l
 			sumAcc+= acc.Var() * l
-			fmt.Printf("train loss %.2f ,accuracy:%.2f\n", sumLoss/trainLen, sumAcc/trainLen)
-
 		}
 		fmt.Printf("epoch %d \n",i+1)
 		fmt.Printf("train loss %.2f ,accuracy:%.2f\n", sumLoss/trainLen, sumAcc/trainLen)

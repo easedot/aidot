@@ -4,7 +4,7 @@ import (
 	"math"
 	"math/rand"
 
-	"gonum.org/v1/gonum/mat"
+	nd "test_ai/numed"
 	ut "test_ai/utils"
 )
 type IDataset interface {
@@ -12,9 +12,11 @@ type IDataset interface {
 }
 type dataSet struct {
 	Train bool
-	Data *mat.Dense
+	Data *nd.NumEd
 	Label []int
 	IDataset IDataset
+	trans *Compose
+	targetTrans *Compose
 }
 
 func (d *dataSet) Init( ) {
@@ -23,11 +25,20 @@ func (d *dataSet) Init( ) {
 func (d *dataSet) Len( ) int {
 	return len(d.Label)
 }
-func (d *dataSet) Get(index int) (*mat.Dense,*mat.Dense){
+func (d *dataSet) Get(index int) ([]float64,int){
+	data := d.Data.RowData(index)
+	////todo debug image show
+	//pv := nd.NewVec(data...)
+	//if pv.Sum(nil,true).Var()>1{
+	//	PrintImg(data,d.Label[index])
+	//}
+
+	d.trans.Run(data)
 	if d.Label==nil{
-		return NewVec(d.Data.RawRowView(index)...).Data, nil
+		return data, 0
 	}else{
-		return NewVec(d.Data.RawRowView(index)...).Data, NewVar(float64(d.Label[index])).Data
+		label := d.Label[index]
+		return data, label
 	}
 }
 
@@ -36,8 +47,8 @@ type spiral struct {
 }
 
 func (s spiral) prePare(d *dataSet) {
-	data,label:=GetSpiral(true)
-	d.Data=mat.NewDense(ut.Flatten(data))
+	data,label:=GetSpiral(s.Train)
+	d.Data=nd.NewDense(ut.Flatten(data))
 	d.Label =label
 }
 
@@ -75,3 +86,4 @@ func GetSpiral(train bool)([][]float64,[]int){
 	})
 	return x,t
 }
+

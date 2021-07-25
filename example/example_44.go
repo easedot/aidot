@@ -39,7 +39,7 @@ func main() {
 
 		model.Grad2Param()
 
-		if i%100==0{
+		if i%1000==0{
 			fmt.Println(i,loss.Sprint("loss"))
 		}
 	}

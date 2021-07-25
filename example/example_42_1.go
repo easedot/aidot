@@ -6,11 +6,11 @@ import (
 	"image/color"
 	"math/rand"
 
-	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 	ep "test_ai/eval"
+	nd "test_ai/numed"
 	ng "test_ai/numgo"
 )
 
@@ -22,7 +22,7 @@ func main() {
 	x1:=ng.NewRand(100,1)
 	x1.Name="x1"
 	//y:=ng.Add(ng.Add(ng.NewVar(5),ng.Mul(ng.NewVar(2),x)),x1)
-	y:=a.Eval(ep.Env{"x":x,"x1":x1})
+	y:=a.Eval(ep.V{"x":x,"x1":x1})
 	y.Name="y"
 	//ut.PrintDense("x",g.Data)
 	//ut.PrintDense("x",x.Data)
@@ -32,11 +32,11 @@ func main() {
 	b:=ng.NewVar(0)
 	b.Name="b"
 	predict:=func(x *ng.Variable)*ng.Variable{
-		y:=ng.Add(ng.Matmul(x,W),b)
-		return y
+		t:=ng.Add(ng.Matmul(x,W),b)
+		return t
 	}
 	lr:=ng.NewVar(0.1)
-	iters:=1000
+	iters:=100
 	for i:=0;i<iters;i++{
 		yPred :=predict(x)
 		loss:=ng.MeanSquaredError(y, yPred)
@@ -51,13 +51,8 @@ func main() {
 		loss.Backward(false)
 
 		//更新参数不使用连接图，直接修改data
-		wb:=&mat.Dense{}
-		wb.MulElem(lr.Data,W.Grad.Data)
-		W.Data.Sub(W.Data,wb)
-
-		bb:=&mat.Dense{}
-		bb.MulElem(lr.Data,b.Grad.Data)
-		b.Data.Sub(b.Data,bb)
+		W.Data=nd.Sub(W.Data,nd.Mul(W.Grad.Data,lr.Data))
+		b.Data=nd.Sub(b.Data,nd.Mul(b.Grad.Data,lr.Data))
 
 		fmt.Println(i,loss.Sprint("loss"),W.Sprint("w"),b.Sprint("b"))
 		if loss.At(0,0)<0.1{

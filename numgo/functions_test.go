@@ -3,7 +3,7 @@ package numgo
 import (
 	"testing"
 
-	"gonum.org/v1/gonum/mat"
+	nd "test_ai/numed"
 )
 
 func TestSum (t *testing.T){
@@ -18,7 +18,7 @@ func TestSum (t *testing.T){
 	testFunc:= Sum
 	for _,test :=range tests{
 		got:=testFunc(test.x)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n %s %s %s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -26,7 +26,7 @@ func TestSum (t *testing.T){
 		dc0:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(i)
 		}, test.x)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
 	}
@@ -45,7 +45,7 @@ func TestMax (t *testing.T){
 	testFunc:= Max
 	for _,test :=range tests{
 		got:=testFunc(test.x,test.axis)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n %s %s %s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -53,7 +53,7 @@ func TestMax (t *testing.T){
 		dc0:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(i,test.axis)
 		}, test.x)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-6){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
 	}
@@ -72,7 +72,7 @@ func TestMin (t *testing.T){
 	testFunc:= Min
 	for _,test :=range tests{
 		got:=testFunc(test.x,test.axis)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -80,7 +80,7 @@ func TestMin (t *testing.T){
 		dc0:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(i,test.axis)
 		}, test.x)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-4){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n%s\n%s\n%s\n%s",test.x.Sprint("x0"),test.x.Sprint("x1"),g0.Sprint("g0"),dc0.Sprint("wg0"))
 		}
 	}
@@ -97,7 +97,7 @@ func TestClip (t *testing.T){
 	testFunc:= Clip
 	for _,test :=range tests{
 		got:=testFunc(test.x,test.min,test.max)
-		if !mat.Equal(got.Data,test.want.Data){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -105,7 +105,8 @@ func TestClip (t *testing.T){
 		dc0:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(i,test.min,test.max)
 		}, test.x)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-8){
+		//1e-8
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),g0.Sprint("g"),dc0.Sprint("wg"))
 		}
 	}
@@ -123,7 +124,7 @@ func TestSoftmax(t *testing.T){
 	testFunc:= Softmax
 	for _,test :=range tests{
 		got:=testFunc(test.x,test.axis)
-		if !mat.EqualApprox(got.Data,test.want.Data,1e-4){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -131,7 +132,7 @@ func TestSoftmax(t *testing.T){
 		dc0:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(i,test.axis)
 		}, test.x)
-		if mat.EqualApprox(g0.Data,dc0.Data,1e-8){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),g0.Sprint("g"),dc0.Sprint("wg"))
 		}
 	}
@@ -147,7 +148,7 @@ func TestSoftmaxCrossEntroy(t *testing.T){
 	testFunc:= SoftmaxCrossEntroy
 	for _,test :=range tests{
 		got:=testFunc(test.x,test.t)
-		if !mat.EqualApprox(got.Data,test.want.Data,1e-4){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -155,7 +156,7 @@ func TestSoftmaxCrossEntroy(t *testing.T){
 		dc0:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(i,test.t)
 		}, test.x)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-8){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),g0.Sprint("g"),dc0.Sprint("wg"))
 		}
 	}
@@ -171,7 +172,7 @@ func TestSigmoid(t *testing.T){
 	testFunc:= Sigmoid
 	for _,test :=range tests{
 		got:=testFunc(test.x)
-		if !mat.EqualApprox(got.Data,test.want.Data,1e-4){
+		if !nd.Equal(got.Data,test.want.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 		got.Backward(true)
@@ -179,7 +180,7 @@ func TestSigmoid(t *testing.T){
 		dc0:=NumericalDiff(func(i *Variable) *Variable {
 			return testFunc(i)
 		}, test.x)
-		if !mat.EqualApprox(g0.Data,dc0.Data,1e-8){
+		if !nd.Equal(g0.Data,dc0.Data){
 			t.Errorf("\n%s\n%s\n%s",test.x.Sprint("x"),g0.Sprint("g"),dc0.Sprint("wg"))
 		}
 	}

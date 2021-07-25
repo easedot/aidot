@@ -123,7 +123,7 @@ func TestMask(t *testing.T){
 	}
 	for _,test :=range tests{
 		got:=test.x0.Mask(test.cond)
-		if Equal(got,test.want){
+		if !Equal(got,test.want){
 			t.Errorf("\n %s %s %s",test.x0.Sprint("x0"),got.Sprint("y"),test.want.Sprint("w"))
 		}
 	}
@@ -143,7 +143,7 @@ func TestMax(t *testing.T){
 	testFunc := _max
 	for _,test :=range tests {
 		got := testFunc(test.x,test.axis,test.keepDims)
-		if Equal(got, test.want) {
+		if !Equal(got, test.want) {
 			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
 		}
 	}
@@ -199,6 +199,99 @@ func TestSum(t *testing.T){
 	testFunc := _sum
 	for _,test :=range tests {
 		got := testFunc(test.x,test.axis,test.keepDims)
+		if !Equal(got, test.want) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
+		}
+	}
+}
+func TestMean(t *testing.T){
+	var tests = []struct{
+		x *NumEd
+		want *NumEd
+	}{
+		{NewMat(2,3,1,2,3,3,2,1),NewVar(2)},
+	}
+	for _,test :=range tests {
+		got := test.x.Mean()
+		if !Equal(got, test.want) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
+		}
+	}
+}
+func TestNeg(t *testing.T){
+	var tests = []struct{
+		x *NumEd
+		want *NumEd
+	}{
+		{NewMat(2,3,1,2,3,3,2,1),NewMat(2,3,-1,-2,-3,-3,-2,-1)},
+	}
+	for _,test :=range tests {
+		got := test.x.Neg()
+		if !Equal(got, test.want) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
+		}
+	}
+}
+func TestPow(t *testing.T){
+	var tests = []struct{
+		x *NumEd
+		want *NumEd
+	}{
+		{NewMat(2,3,1,2,3,3,2,1),NewMat(2,3,1,4,9,9,4,1)},
+	}
+	for _,test :=range tests {
+		got := test.x.Pow(2)
+		if !Equal(got, test.want) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
+		}
+	}
+}
+
+func TestClip(t *testing.T){
+	var tests = []struct{
+		x *NumEd
+		min,max float64
+		want *NumEd
+	}{
+		{NewMat(2,3,1,2,3,3,2,1),1,2,NewMat(2,3,1,2,2,2,2,1)},
+	}
+	for _,test :=range tests {
+		got := test.x.Clip(test.min,test.max)
+		if !Equal(got, test.want) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
+		}
+	}
+}
+
+func TestRows(t *testing.T) {
+	var tests = []struct{
+		x *NumEd
+		s []int
+		want *NumEd
+	}{
+		{NewMat(2,3,1,2,3,3,2,1),[]int{1},NewVec(3,2,1)},
+		{NewMat(3,3,1,2,3,3,2,1,4,5,6),[]int{0,2},NewMat(2,3,1,2,3,4,5,6)},
+		{NewMat(4,3,1,2,3,3,2,1,4,5,6,6,5,4),[]int{1,3},NewMat(2,3,3,2,1,6,5,4)},
+	}
+	for _,test :=range tests {
+		got := test.x.Rows(test.s...)
+		if !Equal(got, test.want) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
+		}
+	}
+}
+
+func TestRowsCol(t *testing.T) {
+	var tests = []struct{
+		x *NumEd
+		s []int
+		want *NumEd
+	}{
+		{NewMat(2,3,1,2,3,3,2,1),[]int{1,2},NewMat(2,1,2,1)},
+		{NewMat(3,3,1,2,3,3,2,1,4,5,6),[]int{1,2,0},NewMat(3,1,2,1,4)},
+	}
+	for _,test :=range tests {
+		got := test.x.RowsCol(test.s...)
 		if !Equal(got, test.want) {
 			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
 		}

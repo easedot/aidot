@@ -1,141 +1,160 @@
 package numgo
 
 import (
-	"math"
+	"log"
 
-	nd "test_ai/numed"
+	ut "test_ai/utils"
 )
 
-type ActiveFunc func(x *Variable)*Variable
-type Apply func(_,_ int,v float64) float64
+type ActiveFunc func(x *Variable) *Variable
+type Apply func(_, _ int, v float64) float64
 
 type IUpdateGrad interface {
 	updateGrad(v *Variable)
 }
 type IModel interface {
 	forward(x *Variable) *Variable
-	getLayer()[]*Layer
+	getLayer() []*Layer
 }
 
 type Model struct {
-	IModel IModel
+	IModel      IModel
 	IUpdateGrad IUpdateGrad
-	layers []*Layer
+	layers      []*Layer
 }
-func (m *Model) Plot(x *Variable,verbos bool,file string) {
-	y:=m.IModel.forward(x)
-	y.Plot(verbos,file)
+
+func (m *Model) Plot(x *Variable, verbos bool, file string) {
+	y := m.IModel.forward(x)
+	y.Plot(verbos, file)
 }
 func (m *Model) Forward(x interface{}) *Variable {
-	xv:=AsVar(x)
+	xv := AsVar(x)
 	return m.IModel.forward(xv)
 }
-func (m *Model) Grad2Param(){
-	for _,l:=range m.IModel.getLayer(){
-		for _,v:=range l.GetParams(){
+func (m *Model) SaveWeights(filename string) {
+	var p []map[string]*Variable
+	for _, l := range m.IModel.getLayer() {
+		pv := l.GetParams()
+		p = append(p, pv)
+	}
+	if err := ut.WriteGob(filename, p); err != nil {
+		log.Printf("save weight params error")
+		return
+	}
+}
+func (m *Model) LoadWeights(filename string) {
+	var p []map[string]*Variable
+	if err := ut.WriteGob(filename, p); err != nil {
+		log.Printf("save weight params error")
+		return
+	}
+	for i, l := range m.IModel.getLayer() {
+		l.SetParams(p[i])
+	}
+}
+func (m *Model) Grad2Param() {
+	for _, l := range m.IModel.getLayer() {
+		for _, v := range l.GetParams() {
 			m.IUpdateGrad.updateGrad(v)
 		}
 	}
 }
-func (m *Model) ClearGrad(){
-	for _,l:=range m.IModel.getLayer(){
-		for _,v:=range l.GetParams(){
+func (m *Model) ClearGrad() {
+	for _, l := range m.IModel.getLayer() {
+		for _, v := range l.GetParams() {
 			v.ClearGrade()
 		}
 	}
 }
 
-func MLP(active ActiveFunc,opt IUpdateGrad,outSizes ...int) *Model{
-	mlp:= mLP{}
-	if active==nil{
-		mlp.Active=Sigmoid
-	}else{
-		mlp.Active=active
+func (m *Model) ResetState() {
+	for _, l := range m.IModel.getLayer() {
+		l.ResetState()
 	}
-	for i,o:=range outSizes{
+}
+func MLP(active ActiveFunc, opt IUpdateGrad, outSizes ...int) *Model {
+	mlp := mLP{}
+	if active == nil {
+		mlp.Active = Sigmoid
+	} else {
+		mlp.Active = active
+	}
+	for i, o := range outSizes {
 		var l *Layer
-		if i%2==0{
-			l=NewLinear(0,o,true,mlp.Active)
-		}else{
-			l=NewLinear(0,o,true,nil)
+		if i%2 == 0 {
+			l = NewLinear(0, o, true, mlp.Active)
+		} else {
+			l = NewLinear(0, o, true, nil)
 		}
 		//l=NewLinear(0,o,true,mlp.Active)
-		mlp.layers=append(mlp.Model.layers,l)
+		mlp.layers = append(mlp.Model.layers, l)
 	}
-	return &Model{IModel: mlp,IUpdateGrad: opt}
+	return &Model{IModel: &mlp, IUpdateGrad: opt}
 }
+
 type mLP struct {
 	Model
 	Active ActiveFunc
 }
-func (t mLP) getLayer()[]*Layer{
+
+func (t *mLP) getLayer() []*Layer {
 	return t.layers
 }
 
-func (t mLP) forward(x *Variable) *Variable {
-	y:=x
-	for _,l:=range t.layers{
-		y=l.Forward(y)
+func (t *mLP) forward(x *Variable) *Variable {
+	y := x
+	for _, l := range t.layers {
+		y = l.Forward(y)
 	}
 	return y
 }
 
-func SGD(lr float64) IUpdateGrad{
-	sgd:=sGD{Lr:lr}
-	sgd.apply=func(_,_ int,v float64) float64{
-		return v*lr
+func NewSampleRNN(hiddenSize, outSize int, opt IUpdateGrad) *Model {
+	smrnn := simpleRNN{
+		rnn: NewRNN(0, hiddenSize),
+		fc:  NewLinear(0, outSize, true, nil),
 	}
-	return &sgd
-}
-type sGD struct {
-	Lr float64
-	apply Apply
-}
-func (s sGD) updateGrad(v *Variable) {
-	v.Data=nd.Sub(v.Data,nd.Mul(s.Lr,v.Grad.Data))
+	return &Model{IModel: &smrnn, IUpdateGrad: opt}
 }
 
+type simpleRNN struct {
+	Model
+	rnn, fc *Layer
+}
 
-func Adam(alpha,beta1,beta2,eps float64) IUpdateGrad {
-	adm:=&aDam{
-		t:0,
-		alpha: alpha,
-		beta1: beta1,
-		beta2: beta2,
-		ms:make(map[*Variable]*Variable),
-		vs:make(map[*Variable]*Variable),
-		eps: eps,
+func (s *simpleRNN) ResetState() {
+	s.rnn.ResetState()
+}
+func (s *simpleRNN) getLayer() []*Layer {
+	return s.layers
+}
+func (s *simpleRNN) forward(x *Variable) *Variable {
+	y := s.rnn.Forward(x)
+	y = s.fc.Forward(y)
+	return y
+}
+
+func NewBetterRNN(hiddenSize, outSize int, opt IUpdateGrad) *Model {
+	btrnn := betterRNN{
+		lstm: NewLSTM(0, hiddenSize),
+		fc:   NewLinear(0, outSize, true, nil),
 	}
-	adm.applyLr=func(_,_ int,v float64) float64{return v*adm.Lr()}
-	adm.applySqrt=func(_,_ int,v float64) float64{return math.Sqrt(v)+eps}
-	return adm
+	return &Model{IModel: &btrnn, IUpdateGrad: opt}
 }
 
-type aDam struct {
-	t float64
-	alpha,beta1,beta2,eps float64
-	ms map[*Variable]*Variable
-	vs map[*Variable]*Variable
-	applyLr nd.EachFunc
-	applySqrt nd.EachFunc
+type betterRNN struct {
+	Model
+	lstm, fc *Layer
 }
 
-func (a *aDam) Lr() float64 {
-	fix1:=1-math.Pow(a.beta1,a.t)
-	fix2:=1-math.Pow(a.beta2,a.t)
-	return a.alpha*math.Sqrt(fix2)/fix1
+func (s *betterRNN) ResetState() {
+	s.lstm.ResetState()
 }
-func (a *aDam) updateGrad(param *Variable) {
-	a.t+=1
-	if _,ok:=a.ms[param];!ok{
-		a.ms[param]=&Variable{Data:nd.LikeZeros(param.Data)}
-		a.vs[param]=&Variable{Data:nd.LikeZeros(param.Data)}
-	}
-	m, v :=a.ms[param].Data,a.vs[param].Data
-	g:=param.Grad.Data
-	m=nd.Add(m,nd.Mul(1-a.beta1,nd.Sub(g,m)))
-	v=nd.Add(v,nd.Mul(1+a.beta2,nd.Sub(nd.Mul(g,g),v)))
-	m.Apply(a.applyLr)
-	v.Apply(a.applySqrt)
-	param.Data=nd.Sub(param.Data,nd.Div(m,v))
+func (s *betterRNN) getLayer() []*Layer {
+	return s.layers
+}
+func (s *betterRNN) forward(x *Variable) *Variable {
+	y := s.lstm.Forward(x)
+	y = s.fc.Forward(y)
+	return y
 }

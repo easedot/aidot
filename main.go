@@ -3,57 +3,68 @@ package main
 import "C"
 import (
 	"fmt"
+	"math"
 
+	nd "test_ai/numed"
 	ng "test_ai/numgo"
+	ut "test_ai/utils"
 )
 
 func main() {
-	maxEpoch:=5
-	batchSize:=30
-	lr:=1.0
-	sgd:=ng.SGD(lr)
-	model:=ng.MLP(ng.Sigmoid, sgd,  100, 10)
+	maxEpoch := 30
+	batchSize := 30
+	hiddenSize := 20
+	bpttLength := 30
+	trainSet := ng.SinCurve(true)
+	trainLoader := ng.NewSeqDataLoader(trainSet, batchSize)
+	seqlen := trainSet.Len()
 
-	trainSet := ng.Mnist(true)
-	trainLen :=float64(trainSet.Len())
-	testSet:=ng.Mnist(false)
-	testLen :=float64(testSet.Len())
-
-	trainLoader :=ng.NewDataLoader(trainSet,batchSize,true)
-	testLoader:=ng.NewDataLoader(testSet,batchSize,false)
-
-	for i:=0;i<maxEpoch;i++{
-		ng.Backprop=true
-		sumLoss,sumAcc:=0.0,0.0
-		for trainLoader.HasNext(){
-			dx,dt:= trainLoader.Next()
+	opt := ng.Adam(0.01, 0.9, 0.999, 1e-8)
+	model := ng.NewBetterRNN(hiddenSize, 1, opt)
+	for i := 0; i < maxEpoch; i++ {
+		model.ResetState()
+		loss, lossV, count := ng.NewVar(0), 0.0, 0
+		for trainLoader.HasNext() {
+			dx, dt := trainLoader.Next()
 			y := model.Forward(dx)
-			loss :=ng.SoftmaxCrossEntroy(y,dt)
-			acc:= ng.Accuracy(y,dt)
-			model.ClearGrad()
-			loss.Backward(false)
-			model.Grad2Param()
-			l := float64(len(dt))
-			sumLoss+= loss.Var() * l
-			sumAcc+= acc.Var() * l
-			fmt.Printf("train loss %.2f ,accuracy:%.2f\n", sumLoss/trainLen, sumAcc/trainLen)
+			dv := ng.NewVec(dt...).ReShape(y.Data.Dims())
+			dv.Name = "label"
+			loss = ng.MeanSquaredError(y, dv)
+			lossV += loss.Var()
+			//loss = ng.Add(loss, ng.MeanSquaredError(y, dv))
 
+			count += 1
+			//达到BPTT或者数据末尾
+			if count%bpttLength == 0 || count == seqlen {
+				model.ClearGrad()
+				loss.Backward(false)
+				loss.UnchainBackward()
+				model.Grad2Param()
+			}
 		}
-		fmt.Printf("epoch %d \n",i+1)
-		fmt.Printf("train loss %.2f ,accuracy:%.2f\n", sumLoss/trainLen, sumAcc/trainLen)
-
-		ng.Backprop=false
-		sumLoss,sumAcc=0.0,0.0
-		for testLoader.HasNext() {
-			dx, dt := testLoader.Next()
-			y := model.Forward(dx)
-			loss := ng.SoftmaxCrossEntroy(y, dt)
-			acc := ng.Accuracy(y, dt)
-			l := float64(len(dt))
-			sumLoss += loss.Var() * l
-			sumAcc += acc.Var() * l
+		if i == 0 {
+			loss.Plot(true, "./temp/lstm.png")
 		}
-		fmt.Printf("test loss %.2f ,accuracy:%.2f\n", sumLoss/testLen, sumAcc/testLen)
+		avgLoss := lossV / float64(count)
+		fmt.Printf("epoch %d loss:%f\n", i+1, avgLoss)
 	}
-}
 
+	//Plot
+	ng.Backprop = false
+	xs := nd.NewLinespace(0, 4*math.Pi, 1000).Cos()
+	_, xc := xs.Dims()
+	model.ResetState()
+
+	xf, predList := make([]float64, xc), make([]float64, xc)
+	for i := 0; i < xc; i++ {
+		x := xs.Get(0, i)
+		y := model.Forward(x)
+		xf[i], predList[i] = x, y.Var()
+	}
+
+	pl := ng.NewPlot("LSTM", "X", "Y", 200, 150)
+	pl.Plot("sin", ut.Arange(0, float64(xc), 1), xf, nil)
+	pl.Plot("pred", ut.Arange(0, float64(xc), 1), predList, nil)
+	pl.Save("./temp/points.png")
+
+}

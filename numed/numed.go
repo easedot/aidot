@@ -353,11 +353,11 @@ func (n *NumEd) Rows(rs ...int) *NumEd {
 }
 
 // Rows 依次选取行，然后选取行中指定的列
-func (n *NumEd) RowsCol(rcs ...int) *NumEd {
+func (n *NumEd) RowsCol(rcs ...float64) *NumEd {
 	mr := len(rcs)
 	m := NewMat(mr, 1)
 	for i, c := range rcs {
-		f := n.Slice(i, i+1, c, c+1)
+		f := n.Slice(i, i+1, int(c), int(c)+1)
 		t := m.Slice(i, i+1, 0, 1)
 		t.Copy(f)
 	}

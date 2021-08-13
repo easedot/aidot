@@ -6,19 +6,51 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	x := NewArangeN(3, 2)
+	//x := NewRand(3, 2)
+	x := NewArangeN(4, 4)
+	x1 := NewArangeN(2)
 	x.Print("x")
+	x1.Print("x1")
 	fmt.Printf("cdata:%v\n", x.data)
 	fmt.Printf("shape:%v\n", x.shape)
 	fmt.Printf("strid:%v\n", x.Strides)
-	y := x.Index(1, 1)
-	//y := x.Slice(1, 2, 1)
+	//y := x.SumTo(1, false)
+	//y := x.MaxTo(0, false)
+	//y := x.ArgMax(1, true)
+	//y := x.MeanTo(1, true)
+	y := x.Slices(1, 0, 2)
+	//y := x.Index(1, 1).Reshape(1, -1)
+	//y := x.Slice(1, 2, 1).Reshape(1, -1)
 	//y := Cat(1, x, x)
-	y.Print("index:")
+	//y := x.View(6, -1)
+	//y := x.Clone()
+	//y := Add(x, x1)
+	//y := Dot(x, x)
+	y.Print("add:")
 
 	fmt.Printf("cdata:%v\n", y.data)
 	fmt.Printf("shap:%v\n", y.shape)
 	fmt.Printf("strid:%v\n", y.Strides)
+}
+
+func TestView(t *testing.T) {
+	var tests = []struct {
+		x     *Tensor
+		shape []int
+		want  *Tensor
+	}{
+		{NewArangeN(3, 2), []int{2, 3}, NewArangeN(2, 3)},
+		{NewArangeN(3, 2), []int{-1, 6}, NewArangeN(1, 6)},
+		{NewArangeN(3, 2), []int{-1, 3}, NewArangeN(2, 3)},
+		{NewArangeN(3, 2), []int{6, -1}, NewArangeN(6, 1)},
+		{NewArangeN(3, 2), []int{2, -1}, NewArangeN(2, 3)},
+	}
+	for _, test := range tests {
+		got := test.x.View(test.shape...)
+		if !Eq(got, test.want) {
+			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("want"))
+		}
+	}
 }
 
 func TestIndex(t *testing.T) {
@@ -106,7 +138,7 @@ func TestUnSqueeze(t *testing.T) {
 func TestBroadcast(t *testing.T) {
 	x := NewZero(5, 2, 4, 1)
 	y := NewZero(2, 1, 1)
-	fmt.Printf("broadcastable:%t", isBoradcastable(x.shape, y.shape))
+	fmt.Printf("broadcastable:%t", isBraadcastable(x.shape, y.shape))
 }
 
 func ExampleNewTensor() {

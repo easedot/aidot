@@ -337,9 +337,9 @@ func Softmax_cross_entropy_simple(x *Variable, t []int) float64 {
 	return y
 }
 
-func Accuracy(y interface{}, t []int) *Variable {
+func Accuracy(y interface{}, t []float64) *Variable {
 	yv := AsVar(y)
-	tv := NewVecInt(t...)
+	tv := NewVec(t...)
 	pred := yv.Data.ArgMax(1, true).Reshape(tv.Data.Dims())
 	mask := pred.Mask(func(i, j int, v float64) float64 {
 		if v == tv.Data.Get(i, j) {
@@ -369,7 +369,7 @@ func Dropout(xi interface{}, dropRatio float64) *Variable {
 	}
 }
 
-func SoftmaxCrossEntroy(x interface{}, t []int) *Variable {
+func SoftmaxCrossEntroy(x interface{}, t []float64) *Variable {
 	xv := AsVar(x)
 	f := NewFunction(&softmaxCrossEntropy{t: t})
 	y := f.Run(xv)
@@ -378,7 +378,7 @@ func SoftmaxCrossEntroy(x interface{}, t []int) *Variable {
 
 type softmaxCrossEntropy struct {
 	Function
-	t []int
+	t []float64
 }
 
 func (s *softmaxCrossEntropy) forward(is []*Variable) []*Variable {

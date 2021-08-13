@@ -311,11 +311,11 @@ func TestRows(t *testing.T) {
 func TestRowsCol(t *testing.T) {
 	var tests = []struct {
 		x    *NumEd
-		s    []int
+		s    []float64
 		want *NumEd
 	}{
-		{NewMat(2, 3, 1, 2, 3, 3, 2, 1), []int{1, 2}, NewMat(2, 1, 2, 1)},
-		{NewMat(3, 3, 1, 2, 3, 3, 2, 1, 4, 5, 6), []int{1, 2, 0}, NewMat(3, 1, 2, 1, 4)},
+		{NewMat(2, 3, 1, 2, 3, 3, 2, 1), []float64{1, 2}, NewMat(2, 1, 2, 1)},
+		{NewMat(3, 3, 1, 2, 3, 3, 2, 1, 4, 5, 6), []float64{1, 2, 0}, NewMat(3, 1, 2, 1, 4)},
 	}
 	for _, test := range tests {
 		got := test.x.RowsCol(test.s...)

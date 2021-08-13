@@ -223,9 +223,9 @@ func eye(n int) *mat.Dense {
 	return mat.NewDense(n, n, d)
 }
 
-func SelRowInt(x []int, rs ...int) []int {
+func SelRowInt(x []float64, rs ...int) []float64 {
 	mr := len(rs)
-	m := make([]int, mr)
+	m := make([]float64, mr)
 	for i, r := range rs {
 		m[i] = x[r]
 	}

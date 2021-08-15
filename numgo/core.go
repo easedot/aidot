@@ -68,33 +68,8 @@ type Variable struct {
 	Level   int
 }
 
-func (v *Variable) At(r, c int) float64 {
-	return v.Data.At(r, c)
-}
 func (v *Variable) Plot(verbose bool, file string) {
 	PlotDotGraph(v, verbose, file)
-}
-func (v *Variable) Print(name string) {
-	if name != "" {
-		v.Data.Print(name)
-	} else {
-		v.Data.Print(v.Name)
-	}
-}
-func (v *Variable) Sprint(name string) string {
-	rest := ""
-	if name != "" {
-		rest = v.Data.Sprint(name)
-	} else {
-		rest = v.Data.Sprint(v.Name)
-	}
-	return rest
-}
-func (v *Variable) DataType() string {
-	return fmt.Sprintf("%T", v.Data.At(0, 0))
-}
-func (v *Variable) Shape() *nd.Shape {
-	return nd.NewShape(v.Data.Dims())
 }
 func (v *Variable) ReShape(r, c int) *Variable {
 	s := nd.NewShape(r, c)
@@ -102,12 +77,6 @@ func (v *Variable) ReShape(r, c int) *Variable {
 }
 func (v *Variable) Transpose() *Variable {
 	return Transpose(v)
-}
-func (v *Variable) T() *Variable {
-	return Transpose(v)
-}
-func (v *Variable) Rows(rs ...int) *Variable {
-	return &Variable{Data: v.Data.Rows(rs...)}
 }
 func (v *Variable) ClearGrade() {
 	v.Grad = nil
@@ -174,6 +143,38 @@ func (v *Variable) Backward(retainGrad bool) {
 		}
 	}
 }
+
+func (v *Variable) At(r, c int) float64 {
+	return v.Data.At(r, c)
+}
+func (v *Variable) DataType() string {
+	return fmt.Sprintf("%T", v.Data.At(0, 0))
+}
+func (v *Variable) Shape() *nd.Shape {
+	return nd.NewShape(v.Data.Dims())
+}
+func (v *Variable) Print(name string) {
+	if name != "" {
+		v.Data.Print(name)
+	} else {
+		v.Data.Print(v.Name)
+	}
+}
+func (v *Variable) Sprint(name string) string {
+	rest := ""
+	if name != "" {
+		rest = v.Data.Sprint(name)
+	} else {
+		rest = v.Data.Sprint(v.Name)
+	}
+	return rest
+}
+func (v *Variable) T() *Variable {
+	return Transpose(v)
+}
+func (v *Variable) Rows(rs ...int) *Variable {
+	return &Variable{Data: v.Data.Rows(rs...)}
+}
 func (v *Variable) Var() float64 {
 	return v.Data.Var()
 }
@@ -181,7 +182,7 @@ func (v *Variable) Mean() float64 {
 	return v.Data.Mean().Var()
 }
 
-//Function
+// NewFunction Function
 func NewFunction(f IFunc) Function {
 	return Function{Func: f}
 }
@@ -218,17 +219,6 @@ func (f *Function) Back(ig ...*Variable) []*Variable {
 	//}
 	b := f.Func.backward(f.Inputs, f.Outputs, ig)
 	return b
-}
-
-// MaxLevel -----core function
-func MaxLevel(ivs []*Variable) int {
-	max := 0
-	for _, v := range ivs {
-		if v != nil && v.Level > max {
-			max = v.Level
-		}
-	}
-	return max
 }
 
 //Pow Variable
@@ -371,4 +361,14 @@ func (d *divFunc) backward(i, o, gy []*Variable) []*Variable {
 	gx1 := Mul(g, Div(Neg(x0), Mul(x1, x1)))
 	gx0, gx1 = _checkSumTo(x0.Shape(), x1.Shape(), gx0, gx1)
 	return []*Variable{gx0, gx1}
+}
+
+func MaxLevel(ivs []*Variable) int {
+	max := 0
+	for _, v := range ivs {
+		if v != nil && v.Level > max {
+			max = v.Level
+		}
+	}
+	return max
 }

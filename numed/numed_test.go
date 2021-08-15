@@ -340,5 +340,4 @@ func TestSaveLoad(t *testing.T) {
 			t.Errorf("\n%s\n%s", test.x.Sprint("save"), y.Sprint("load"))
 		}
 	}
-
 }

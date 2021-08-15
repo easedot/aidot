@@ -78,9 +78,8 @@ func NewData(v []float64, shape ...int) *Tensor {
 		ndim:    len(shape),
 		shape:   shape,
 		data:    v,
-		Strides: make([]int, len(shape)),
+		Strides: genStrides(shape),
 	}
-	initStrides(t)
 	return t
 }
 
@@ -91,9 +90,8 @@ func NewZero(shape ...int) *Tensor {
 		ndim:    len(shape),
 		shape:   shape,
 		data:    v,
-		Strides: make([]int, len(shape)),
+		Strides: genStrides(shape),
 	}
-	initStrides(t)
 	return t
 }
 
@@ -116,7 +114,13 @@ func (t *Tensor) Print(name string) {
 	fmt.Print(s)
 }
 func (t *Tensor) Sprint(name string) string {
-	s := fmt.Sprintf("%s\n%s\n", name, sprintTensor(t))
+	s := ""
+	if name != "" {
+		s = fmt.Sprintf("%s\n%s\n", name, sprintTensor(t))
+	} else {
+		s = fmt.Sprintf("%s\n", sprintTensor(t))
+	}
+
 	return s
 }
 func (t *Tensor) Save(file string) {
@@ -156,7 +160,7 @@ func (t *Tensor) Contingous() *Tensor {
 		return t
 	}
 	nd := make([]float64, t.Len())
-	nst := genStrides(t.shape...)
+	nst := genStrides(t.shape)
 	for i := 0; i < t.Len(); i++ {
 		pos := index2pos(i, t.shape, nst)
 		ncIndex := pos2index(pos, t.shape, t.Strides)
@@ -177,7 +181,7 @@ func (t *Tensor) View(shape ...int) *Tensor {
 	if !isContiguous(t) {
 		panic(fmt.Errorf("view tensor must contiguous"))
 	}
-	shape = fillNegShape(t.shape, shape)
+	shape = autoFillNegShape(t.shape, shape)
 	ndim := len(shape)
 	nt := &Tensor{
 		data:    t.data,
@@ -187,7 +191,7 @@ func (t *Tensor) View(shape ...int) *Tensor {
 		Strides: make([]int, ndim),
 	}
 	copy(nt.shape, shape)
-	nt.Strides = genStrides(shape...)
+	nt.Strides = genStrides(shape)
 	return nt
 }
 
@@ -197,7 +201,7 @@ func (t *Tensor) SumTo(dim int, keepDim bool) *Tensor {
 		if nt == nil {
 			nt = dimT
 		} else {
-			nt.Add(dimT)
+			nt = Add(nt, dimT)
 		}
 	})
 	return nt
@@ -205,7 +209,7 @@ func (t *Tensor) SumTo(dim int, keepDim bool) *Tensor {
 
 func (t *Tensor) MeanTo(dim int, keepDim bool) *Tensor {
 	nt := t.SumTo(dim, keepDim)
-	nt.Div(NewVar(float64(t.shape[dim])))
+	nt = Div(nt, NewVar(float64(t.shape[dim])))
 	return nt
 }
 
@@ -217,19 +221,20 @@ func (t *Tensor) ArgMax(dim int, keepDim bool) *Tensor {
 			nt = dimT
 			idt = LikeZeros(dimT)
 		} else {
-			nt.argMax(dimT, idt, idx)
+			nt = argMax(nt, dimT, idt, idx)
 		}
 	})
 	return idt
 }
 
 func (t *Tensor) MaxTo(dim int, keepDim bool) *Tensor {
+
 	var nt *Tensor
 	t.ApplyDim(dim, keepDim, func(idx int, dimT *Tensor) {
 		if nt == nil {
 			nt = dimT
 		} else {
-			nt.Max(dimT)
+			nt = Max(nt, dimT)
 		}
 	})
 	return nt
@@ -240,7 +245,7 @@ func (t *Tensor) MinTo(dim int, keepDim bool) *Tensor {
 		if nt == nil {
 			nt = dimT
 		} else {
-			nt.Min(dimT)
+			nt = Min(nt, dimT)
 		}
 	})
 	return nt
@@ -262,18 +267,51 @@ func (t *Tensor) Index(idx, dim int) *Tensor {
 	return nt
 }
 
-func (t *Tensor) SliceSelect(dim int, keepDim bool, sel ...int) *Tensor {
-	ts := make([]*Tensor, len(sel))
+func (t *Tensor) SliceSel(dim int, keepDim bool, sel1, sel2 []int) *Tensor {
+	if len(sel1) != len(sel2) {
+		panic(fmt.Errorf("sel1 len must equal sel2"))
+	}
+	nt := &Tensor{
+		offset:  0,
+		ndim:    t.ndim,
+		shape:   make([]int, t.ndim),
+		Strides: make([]int, t.ndim),
+	}
 	if keepDim {
-		for i, s := range sel {
-			ts[i] = t.Slice(s, s+1, dim)
-		}
+		copy(nt.shape, t.shape)
+		nt.shape[dim] = len(sel1)
+		nt.Strides = genStrides(nt.shape)
+		nt.data = make([]float64, numElements(nt.shape))
 	} else {
-		for i, s := range sel {
-			ts[i] = t.Index(s, dim)
+		nt.shape = []int{len(sel1)}
+		nt.ndim = 1
+		nt.Strides = genStrides(nt.shape)
+		nt.data = make([]float64, numElements(nt.shape))
+	}
+	dimLen := t.Strides[dim]
+
+	preStride, preShape, oldPreStride := 0, 1, 0
+	if dim > 0 {
+		preStride = nt.Strides[dim-1]
+		preShape = nt.shape[dim-1]
+		oldPreStride = t.Strides[dim-1]
+	}
+	for i := 0; i < preShape; i++ {
+		preOffset := i * preStride
+		opreOffset := i * oldPreStride
+		for j, s := range sel1 {
+			newFrom := j * t.Strides[dim+1]
+			newTo := (j + 1) * t.Strides[dim+1]
+			if keepDim {
+				newFrom = preOffset + j*dimLen + sel2[j]*nt.Strides[dim+1]
+				newTo = preOffset + j*dimLen + (sel2[j]+1)*nt.Strides[dim+1]
+			}
+			oldFrom := t.offset + opreOffset + s*dimLen + sel2[j]*t.Strides[dim+1]
+			oldTo := t.offset + opreOffset + s*dimLen + (sel2[j]+1)*t.Strides[dim+1]
+			copy(nt.data[newFrom:newTo], t.data[oldFrom:oldTo])
 		}
 	}
-	return Cat(dim, ts...)
+	return nt
 }
 
 func (t *Tensor) Slices(dim int, sel ...int) *Tensor {
@@ -284,34 +322,28 @@ func (t *Tensor) Slices(dim int, sel ...int) *Tensor {
 		Strides: make([]int, t.ndim),
 	}
 	copy(nt.shape, t.shape)
-	copy(nt.Strides, t.Strides)
 	nt.shape[dim] = len(sel)
-	nt.Strides = genStrides(nt.shape...)
+	nt.Strides = genStrides(nt.shape)
 	nt.data = make([]float64, numElements(nt.shape))
 	dimLen := nt.Strides[dim]
-	//if dim == 0 {
-	//	for i, ts := range sel {
-	//		copy(nt.data[i*dimLen:(i+1)*dimLen], t.data[t.offset+ts*dimLen:t.offset+(ts+1)*dimLen])
-	//	}
-	//} else {
-	preStrid := 0
-	opreStrid := 0
-	preShape := 1
+
+	preStride, preShape, oldPreStride := 0, 1, 0
 	if dim > 0 {
-		preStrid = nt.Strides[dim-1]
-		opreStrid = t.Strides[dim-1]
+		preStride = nt.Strides[dim-1]
 		preShape = nt.shape[dim-1]
+		oldPreStride = t.Strides[dim-1]
 	}
 	for i := 0; i < preShape; i++ {
-		preOffset := i * preStrid
-		opreOffset := i * opreStrid
+		preOffset := i * preStride
+		opreOffset := i * oldPreStride
 		for j, s := range sel {
-			copy(
-				nt.data[preOffset+j*dimLen:preOffset+(j+1)*dimLen],
-				t.data[t.offset+opreOffset+s*dimLen:t.offset+opreOffset+(s+1)*dimLen])
+			newFrom := preOffset + j*dimLen
+			newTo := preOffset + (j+1)*dimLen
+			oldFrom := t.offset + opreOffset + s*dimLen
+			oldTo := t.offset + opreOffset + (s+1)*dimLen
+			copy(nt.data[newFrom:newTo], t.data[oldFrom:oldTo])
 		}
 	}
-	//}
 	return nt
 }
 
@@ -335,47 +367,54 @@ func Cat(dim int, tensors ...*Tensor) *Tensor {
 	}
 	fistTensor := tensors[0]
 	firstShape := fistTensor.shape
-	dataSize := len(fistTensor.data)
+	dataSize := numElements(firstShape) // len(fistTensor.data)
 	dimSize := fistTensor.shape[dim]
 	for i := 1; i < len(tensors); i++ {
 		tensor := tensors[i]
-		dataSize += len(tensor.data)
+		dataSize += numElements(tensor.shape) // len(tensor.data)
 		dimSize += tensor.shape[dim]
 		if len(tensor.shape) != len(firstShape) {
 			panic(fmt.Errorf("cat tensors must same ndim"))
 		}
 		for j := 0; j < len(firstShape); j++ {
+			//除了cat的这个维度外，其他维度都相同才能cat
 			if j != dim && firstShape[j] != tensor.shape[j] {
 				panic(fmt.Errorf("cat tensors must same dim size"))
 			}
-
 		}
 	}
-	newData := make([]float64, dataSize)
-	nshape := make([]int, len(firstShape))
-	copy(nshape, firstShape)
-	nshape[dim] = dimSize
-	nstrides := genStrides(nshape...)
+	nt := &Tensor{
+		offset:  0,
+		ndim:    fistTensor.ndim,
+		shape:   make([]int, len(firstShape)),
+		Strides: make([]int, fistTensor.ndim),
+		data:    make([]float64, dataSize),
+	}
+	copy(nt.shape, firstShape)
+	nt.shape[dim] = dimSize
+	nt.Strides = genStrides(nt.shape)
+
 	if dim == 0 {
 		for i, ts := range tensors {
-			dl := len(ts.data)
-			copy(newData[i*dl:(i+1)*dl], ts.data[ts.offset:])
+			dl := numElements(ts.shape) // len(ts.data)
+			copy(nt.data[i*dl:(i+1)*dl], ts.data[ts.offset:])
 		}
 	} else {
-		preStrid := nstrides[dim-1]
-		for i := 0; i < nshape[dim-1]; i++ {
+		preStrid := nt.Strides[dim-1]
+		preShape := nt.shape[dim-1]
+		for i := 0; i < preShape; i++ {
 			preOffset := i * preStrid
 			for _, ts := range tensors {
-				tsStrid := ts.Strides[dim-1]
-				tsStart := ts.offset + i*tsStrid
-				tsv := ts.data[tsStart : tsStart+tsStrid]
-				copy(newData[preOffset:preOffset+tsStrid], tsv)
-				preOffset += tsStrid
+				tsPreStrid := ts.Strides[dim-1]
+
+				tsStart := ts.offset + i*tsPreStrid
+				tsEnd := tsStart + tsPreStrid
+				copy(nt.data[preOffset:preOffset+tsPreStrid], ts.data[tsStart:tsEnd])
+				preOffset += tsPreStrid
 			}
 		}
 	}
-
-	return NewData(newData, nshape...)
+	return nt
 }
 
 func (t *Tensor) Transpose(dim0, dim1 int) *Tensor {
@@ -414,27 +453,48 @@ func (t *Tensor) Permute(newIndex ...int) *Tensor {
 	return nt
 }
 
-func (t *Tensor) Squeeze() *Tensor {
-	ns := []int{}
+func Squeeze(t *Tensor) *Tensor {
+	var ns []int
 	for i := 0; i < t.ndim; i++ {
 		if t.shape[i] != 1 {
 			ns = append(ns, t.shape[i])
 		}
 	}
-	t.shape = ns
-	t.Strides = genStrides(ns...)
-	return t.View(ns...)
+	nt := &Tensor{
+		data:    t.data,
+		ndim:    len(ns),
+		shape:   ns,
+		Strides: genStrides(ns),
+		offset:  t.offset,
+	}
+	return nt
 }
 
-func (t *Tensor) UnSqueeze(dim int) *Tensor {
-	//todo 这里改了t也返回了新的tensor？
-	t.shape = append(t.shape, 0)
-	copy(t.shape[dim+1:], t.shape[dim:])
-	t.shape[dim] = 1
-	t.Strides = genStrides(t.shape...)
-	t.ndim = len(t.shape)
-	return t.View(t.shape...)
+func UnSqueeze(t *Tensor, dim int) *Tensor {
+	nt := &Tensor{
+		data:  t.data,
+		shape: make([]int, len(t.shape)+1),
+	}
+	copy(nt.shape, t.shape)
+	copy(nt.shape[dim+1:], nt.shape[dim:])
+	nt.shape[dim] = 1
+	nt.Strides = genStrides(nt.shape)
+	nt.ndim = len(nt.shape)
+	return nt
 }
+
+//func UnSqueeze(t *Tensor, dim int) *Tensor {
+//	nt := &Tensor{
+//		data:  t.data,
+//		shape: make([]int, len(t.shape)+1),
+//	}
+//	t.shape = append(t.shape, 0)
+//	copy(t.shape[dim+1:], t.shape[dim:])
+//	t.shape[dim] = 1
+//	t.Strides = genStrides(t.shape...)
+//	t.ndim = len(t.shape)
+//	return t.View(t.shape...)
+//}
 
 func Equal(x, y *Tensor) bool {
 	if !testEqInt(x.shape, y.shape) {
@@ -474,69 +534,122 @@ func (t *Tensor) Clone() *Tensor {
 	return nt
 }
 
+func (t *Tensor) CloneFrom(o *Tensor) {
+	//todo 这里用拷贝还是复用数据
+	t.data = o.data
+	copy(t.shape, o.shape)
+	copy(t.Strides, o.Strides)
+	t.ndim = o.ndim
+	t.offset = o.offset
+}
+
 //Add func
 func Add(t1, t2 *Tensor) *Tensor {
-	nt := t1.Clone()
-	nt.Add(t2)
+	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+		return v + ov
+	})
 	return nt
 }
 
-//Add todo for cuda
-func (t *Tensor) Add(ot *Tensor) {
-	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
-		return v + ov
+//Sub func
+func Sub(t1, t2 *Tensor) *Tensor {
+	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+		return v - ov
 	})
+	return nt
+}
+
+//Mul func
+func Mul(t1, t2 *Tensor) *Tensor {
+	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+		return v * ov
+	})
+	return nt
+}
+
+//Dot func
+func Dot(t1, t2 *Tensor) *Tensor {
+	dim := 0
+	if t1.ndim == 1 && t2.ndim == 1 { //for 1D vector
+		return Sum(Mul(t1, t2))
+	}
+	if t1.shape[0] != t2.shape[1] {
+		panic(fmt.Errorf("dot a rows must equal b cols"))
+	}
+	t1r, t2c := t1.shape[dim], t2.shape[dim+1]
+	nt := NewZero(t1r, t2c)
+	for i := 0; i < t1r; i++ {
+		for j := 0; j < t2c; j++ {
+			sum := Mul(t1.Index(i, dim), t2.Index(j, dim+1)).Sum()
+			nt.Set(sum, i, j)
+		}
+	}
+	return nt
 }
 
 //Div func
 func Div(t1, t2 *Tensor) *Tensor {
-	nt := t1.Clone()
-	nt.Add(t2)
-	return nt
-}
-
-//Div todo for cuda
-func (t *Tensor) Div(ot *Tensor) {
-	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
+	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
 		return v / ov
 	})
+	return nt
 }
 
 //Max func
 func Max(t1, t2 *Tensor) *Tensor {
-	nt := t1.Clone()
-	nt.Max(t2)
-	return nt
-}
-
-//Max todo for cuda
-func (t *Tensor) Max(ot *Tensor) {
-	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
+	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
 		if v < ov {
 			return ov
 		}
 		return v
 	})
-}
-
-//Min func
-func Min(t1, t2 *Tensor) *Tensor {
-	nt := t1.Clone()
-	nt.Min(t2)
 	return nt
 }
 
-//Max todo for cuda
-func (t *Tensor) Min(ot *Tensor) {
-	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
+////Max todo for cuda
+//func (t *Tensor) Max(ot *Tensor) {
+//	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
+//		if v < ov {
+//			return ov
+//		}
+//		return v
+//	})
+//}
+
+//Min func
+func Min(t1, t2 *Tensor) *Tensor {
+	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
 		if v > ov {
 			return ov
 		}
 		return v
 	})
+	return nt
 }
 
+////Max todo for cuda
+//func (t *Tensor) Min(ot *Tensor) {
+//	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
+//		if v > ov {
+//			return ov
+//		}
+//		return v
+//	})
+//}
+
 //---
+func Sum(t *Tensor) *Tensor {
+	return NewVar(t.Sum())
+}
+
+func (t *Tensor) Sum() float64 {
+	sum := 0.0
+	t.Apply(func(v float64) float64 {
+		sum += v
+		return v
+	})
+	return sum
+}
 
 func Sin(t *Tensor) *Tensor {
 	nt := t.Clone()
@@ -694,39 +807,54 @@ func (t *Tensor) ApplyPos(fn func(pos []int, v float64) float64) {
 	}
 }
 
-func padShape(x, y *Tensor) {
-	pad := len(x.shape) - len(y.shape)
-	if pad > 0 {
-		for i := 0; i < pad; i++ {
-			//todo Unsqueeze 即修改了本身也返回了新的，这里先这样处理
-			//y = y.UnSqueeze(0)
-			y.UnSqueeze(0)
-		}
-	}
-	if pad < 0 {
-		for i := 0; i < -1*pad; i++ {
-			//x = x.UnSqueeze(0)
-			x.UnSqueeze(0)
-		}
-	}
-}
-
-func (t *Tensor) ApplyPair(other *Tensor, fn func(idx int, v, ov float64) float64) {
+func ApplyPair(t, other *Tensor, fn func(idx int, v, ov float64) float64) *Tensor {
 	if !isBraadcastable(t.shape, other.shape) {
 		panic(fmt.Errorf("calc tensor shape must isBraadcastable"))
 	}
-	//todo pading shape
-	padShape(t, other)
-	size := numElements(t.shape)
-	for i := 0; i < size; i++ {
-		pos := index2pos(i, t.shape, t.Strides)
-		//fmt.Printf("pos:%v", pos)
+	if t.ndim > other.ndim {
+		other = padTensor(t.ndim-other.ndim, other)
+	}
+	if t.ndim < other.ndim {
+		t = padTensor(other.ndim-t.ndim, t)
+	}
+	nt := newUnionTensor(t, other)
+	for i := 0; i < len(nt.data); i++ {
+		pos := index2pos(i, nt.shape, nt.Strides)
 		v := t.Get(pos...)
 		ov := other.Get(pos...)
-		t.Set(fn(i, v, ov), pos...)
+		nt.Set(fn(i, v, ov), pos...)
 	}
+	return nt
 }
 
+//func (t *Tensor) ApplyPair(other *Tensor, fn func(idx int, v, ov float64) float64) {
+//	if !isBraadcastable(t.shape, other.shape) {
+//		panic(fmt.Errorf("calc tensor shape must isBraadcastable"))
+//	}
+//	//todo pading shape
+//	padShape(t, other)
+//	size := numElements(t.shape)
+//	ySize := numElements(other.shape)
+//	if ySize > size {
+//		calcPaire(other, t, fn)
+//		//todo 这里目前为了效率使用的浅拷贝，复用了底层的data
+//		t.CloneFrom(other)
+//	} else {
+//		calcPaire(t, other, fn)
+//	}
+//
+//}
+//func calcPaire(x, y *Tensor, fn func(idx int, v, ov float64) float64) {
+//	size := numElements(x.shape)
+//	for i := 0; i < size; i++ {
+//		//pos := index2pos(i, x.shape, y.Strides)
+//		pos := index2pos(i, x.shape, x.Strides)
+//		//fmt.Printf("pos:%v", pos)
+//		v := x.Get(pos...)
+//		ov := y.Get(pos...)
+//		x.Set(fn(i, v, ov), pos...)
+//	}
+//}
 func (t *Tensor) ApplyDim(dim int, keepDim bool, fn func(idx int, dimT *Tensor)) {
 	dimSize := t.shape[dim]
 	if keepDim {
@@ -741,9 +869,45 @@ func (t *Tensor) ApplyDim(dim int, keepDim bool, fn func(idx int, dimT *Tensor))
 }
 
 //---tools
+
+func newUnionTensor(x, y *Tensor) *Tensor {
+	ndim := len(x.shape)
+	nshape := make([]int, ndim)
+	for i := 0; i < ndim; i++ {
+		nshape[i] = x.shape[i]
+		if y.shape[i] > x.shape[i] {
+			nshape[i] = y.shape[i]
+		}
+	}
+	nt := &Tensor{
+		data:    make([]float64, numElements(nshape)),
+		ndim:    ndim,
+		shape:   nshape,
+		Strides: genStrides(nshape),
+	}
+	return nt
+}
+
+//func padShape(x, y *Tensor) {
+//	pad := len(x.shape) - len(y.shape)
+//	if pad > 0 {
+//		y = padTensor(pad, y)
+//	}
+//	if pad < 0 {
+//		x = padTensor(-1*pad, x)
+//	}
+//}
+
+func padTensor(pad int, t *Tensor) *Tensor {
+	for i := 0; i < pad; i++ {
+		t = UnSqueeze(t, 0)
+	}
+	return t
+}
+
 //argMax todo for cuda
-func (t *Tensor) argMax(ot, idt *Tensor, idm int) {
-	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
+func argMax(t, ot, idt *Tensor, idm int) *Tensor {
+	nt := ApplyPair(t, ot, func(idx int, v, ov float64) float64 {
 		if v < ov {
 			pos := index2pos(idx, idt.shape, idt.Strides)
 			idt.Set(float64(idm), pos...)
@@ -751,6 +915,7 @@ func (t *Tensor) argMax(ot, idt *Tensor, idm int) {
 		}
 		return v
 	})
+	return nt
 }
 
 func testEq(a, b []float64, e ...float64) bool {
@@ -785,7 +950,7 @@ func remove(slice []int, i int) []int {
 	return slice[:len(slice)-1]
 }
 
-func genStrides(shape ...int) []int {
+func genStrides(shape []int) []int {
 	strides := make([]int, len(shape))
 	stride := 1
 	for i := len(shape) - 1; i >= 0; i-- {
@@ -795,7 +960,7 @@ func genStrides(shape ...int) []int {
 	return strides
 }
 func initStrides(t *Tensor) {
-	t.Strides = genStrides(t.shape...)
+	t.Strides = genStrides(t.shape)
 }
 
 func isContiguous(t *Tensor) bool {
@@ -847,7 +1012,7 @@ func index2pos(index int, shape, strides []int) []int {
 func isBraadcastable(x, y []int) bool {
 	xndim := len(x)
 	yndim := len(y)
-	if xndim < 1 || yndim < 1 {
+	if xndim < 1 && yndim < 1 {
 		panic(fmt.Errorf("broadcast ndim must>=1"))
 	}
 	if xndim > yndim {
@@ -873,7 +1038,7 @@ func isBraadcastable(x, y []int) bool {
 	}
 	return true
 }
-func fillNegShape(oldShape, newShape []int) []int {
+func autoFillNegShape(oldShape, newShape []int) []int {
 	oSize := numElements(oldShape)
 	nSize, negPos := 1, -1
 	for i, v := range newShape {
@@ -907,7 +1072,7 @@ func sprintTensor(xi *Tensor) string {
 			ds := i % x.Strides[j]
 			if ds == 0 { //start
 				if j == x.ndim-2 { //last dim
-					s += fmt.Sprintf("%*s", j, " ")
+					s += fmt.Sprintf("%*s", j, "")
 					s += fmt.Sprintf("%s", "[")
 				} else {
 					s += fmt.Sprintf("%*s", j+1, "[")
@@ -915,7 +1080,7 @@ func sprintTensor(xi *Tensor) string {
 			}
 		}
 
-		s += fmt.Sprintf(" %.6f ", x.data[(x.offset+i)])
+		s += fmt.Sprintf(" %9.6f ", x.data[(x.offset+i)])
 
 		for j := x.ndim - 2; j >= 0; j-- {
 			ds := i % x.Strides[j]

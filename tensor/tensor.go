@@ -9,6 +9,18 @@ import (
 	ut "test_ai/utils"
 )
 
+type EachFunc func(v float64) float64
+type Shape struct {
+	shape []int
+}
+
+func (s Shape) Data() []int {
+	return s.shape
+}
+func (s Shape) Dims() int {
+	return len(s.shape)
+}
+
 func NewRand(shape ...int) *Tensor {
 	s := Rand(shape...)
 	return NewData(s, shape...)
@@ -49,11 +61,11 @@ func LikeOnes(t *Tensor) *Tensor {
 	return NewOnes(t.shape...)
 }
 func LikeZeros(t *Tensor) *Tensor {
-	return NewZero(t.shape...)
+	return NewZeros(t.shape...)
 }
 
 func NewEyes(n int) *Tensor {
-	d := NewZero(n, n)
+	d := NewZeros(n, n)
 	for i := 0; i < n; i++ {
 		d.Set(1, i, i)
 	}
@@ -83,7 +95,7 @@ func NewData(v []float64, shape ...int) *Tensor {
 	return t
 }
 
-func NewZero(shape ...int) *Tensor {
+func NewZeros(shape ...int) *Tensor {
 	size := numElements(shape)
 	v := make([]float64, size)
 	t := &Tensor{
@@ -103,6 +115,12 @@ type Tensor struct {
 
 func (t *Tensor) Shape() []int {
 	return t.shape
+}
+func (t *Tensor) DataType() string {
+	return fmt.Sprintf("%T", t.data[0])
+}
+func (t *Tensor) Dims() int {
+	return len(t.shape)
 }
 
 func (t *Tensor) Len() int {
@@ -207,9 +225,16 @@ func (t *Tensor) SumTo(dim int, keepDim bool) *Tensor {
 	return nt
 }
 
+func (t *Tensor) Mean() *Tensor {
+	nt := t.Sum()
+	nt = nt / float64(t.Len())
+	return NewVar(nt)
+}
+
 func (t *Tensor) MeanTo(dim int, keepDim bool) *Tensor {
 	nt := t.SumTo(dim, keepDim)
 	nt = Div(nt, NewVar(float64(t.shape[dim])))
+
 	return nt
 }
 
@@ -505,7 +530,7 @@ func Equal(x, y *Tensor) bool {
 	}
 	return true
 }
-func Eq(xi, yi *Tensor, e ...float64) bool {
+func DeepEqual(xi, yi *Tensor, e ...float64) bool {
 	x, y := xi.Contingous(), yi.Contingous()
 	if !testEqInt(x.shape, y.shape) {
 		return false
@@ -528,24 +553,34 @@ func (t *Tensor) Clone() *Tensor {
 		Strides: make([]int, len(t.Strides)),
 		data:    make([]float64, len(t.data)),
 	}
-	copy(nt.data, t.data)
 	copy(nt.shape, t.shape)
 	copy(nt.Strides, t.Strides)
 	return nt
 }
 
-func (t *Tensor) CloneFrom(o *Tensor) {
-	//todo 这里用拷贝还是复用数据
-	t.data = o.data
-	copy(t.shape, o.shape)
-	copy(t.Strides, o.Strides)
-	t.ndim = o.ndim
-	t.offset = o.offset
+func (t *Tensor) DeepClone() *Tensor {
+	nt := t.Clone()
+	copy(nt.data, t.data)
+	return nt
+}
+
+func (t *Tensor) Copy(from *Tensor) {
+	t.data = from.data
+	copy(t.shape, from.shape)
+	copy(t.Strides, from.Strides)
+	t.ndim = from.ndim
+	t.offset = from.offset
+}
+
+// DeepCopy deep copy data from o to t
+func (t *Tensor) DeepCopy(from *Tensor) {
+	t.Copy(from)
+	copy(t.data, from.data)
 }
 
 //Add func
 func Add(t1, t2 *Tensor) *Tensor {
-	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		return v + ov
 	})
 	return nt
@@ -553,7 +588,7 @@ func Add(t1, t2 *Tensor) *Tensor {
 
 //Sub func
 func Sub(t1, t2 *Tensor) *Tensor {
-	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		return v - ov
 	})
 	return nt
@@ -561,7 +596,7 @@ func Sub(t1, t2 *Tensor) *Tensor {
 
 //Mul func
 func Mul(t1, t2 *Tensor) *Tensor {
-	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		return v * ov
 	})
 	return nt
@@ -577,7 +612,7 @@ func Dot(t1, t2 *Tensor) *Tensor {
 		panic(fmt.Errorf("dot a rows must equal b cols"))
 	}
 	t1r, t2c := t1.shape[dim], t2.shape[dim+1]
-	nt := NewZero(t1r, t2c)
+	nt := NewZeros(t1r, t2c)
 	for i := 0; i < t1r; i++ {
 		for j := 0; j < t2c; j++ {
 			sum := Mul(t1.Index(i, dim), t2.Index(j, dim+1)).Sum()
@@ -589,7 +624,7 @@ func Dot(t1, t2 *Tensor) *Tensor {
 
 //Div func
 func Div(t1, t2 *Tensor) *Tensor {
-	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		return v / ov
 	})
 	return nt
@@ -597,7 +632,7 @@ func Div(t1, t2 *Tensor) *Tensor {
 
 //Max func
 func Max(t1, t2 *Tensor) *Tensor {
-	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		if v < ov {
 			return ov
 		}
@@ -608,7 +643,7 @@ func Max(t1, t2 *Tensor) *Tensor {
 
 ////Max todo for cuda
 //func (t *Tensor) Max(ot *Tensor) {
-//	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
+//	t.ApplyBroadcast(ot, func(idx int, v, ov float64) float64 {
 //		if v < ov {
 //			return ov
 //		}
@@ -618,7 +653,7 @@ func Max(t1, t2 *Tensor) *Tensor {
 
 //Min func
 func Min(t1, t2 *Tensor) *Tensor {
-	nt := ApplyPair(t1, t2, func(idx int, v, ov float64) float64 {
+	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		if v > ov {
 			return ov
 		}
@@ -629,7 +664,7 @@ func Min(t1, t2 *Tensor) *Tensor {
 
 ////Max todo for cuda
 //func (t *Tensor) Min(ot *Tensor) {
-//	t.ApplyPair(ot, func(idx int, v, ov float64) float64 {
+//	t.ApplyBroadcast(ot, func(idx int, v, ov float64) float64 {
 //		if v > ov {
 //			return ov
 //		}
@@ -652,7 +687,7 @@ func (t *Tensor) Sum() float64 {
 }
 
 func Sin(t *Tensor) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Sin()
 	return nt
 }
@@ -664,7 +699,7 @@ func (t *Tensor) Sin() {
 }
 
 func Cos(t *Tensor) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Cos()
 	return nt
 }
@@ -676,7 +711,7 @@ func (t *Tensor) Cos() {
 }
 
 func Tanh(t *Tensor) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Tanh()
 	return nt
 }
@@ -688,7 +723,7 @@ func (t *Tensor) Tanh() {
 }
 
 func Pow(t *Tensor, n int) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Pow(n)
 	return nt
 }
@@ -700,7 +735,7 @@ func (t *Tensor) Pow(n int) {
 }
 
 func Exp(t *Tensor) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Exp()
 	return nt
 }
@@ -711,7 +746,7 @@ func (t *Tensor) Exp() {
 	})
 }
 func Sqrt(t *Tensor) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Sqrt()
 	return nt
 }
@@ -723,7 +758,7 @@ func (t *Tensor) Sqrt() {
 }
 
 func Neg(t *Tensor) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Neg()
 	return nt
 }
@@ -735,7 +770,7 @@ func (t *Tensor) Neg() {
 }
 
 func Log(t *Tensor) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Log()
 	return nt
 }
@@ -747,7 +782,7 @@ func (t *Tensor) Log() {
 }
 
 func Clip(t *Tensor, min, max float64) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Clip(min, max)
 	return nt
 }
@@ -764,7 +799,7 @@ func (t *Tensor) Clip(min, max float64) {
 	})
 }
 func Maximum(t *Tensor, max float64) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Maximum(max)
 	return nt
 }
@@ -778,7 +813,7 @@ func (t *Tensor) Maximum(max float64) {
 	})
 }
 func Minimum(t *Tensor, min float64) *Tensor {
-	nt := t.Clone()
+	nt := t.DeepClone()
 	nt.Minimum(min)
 	return nt
 }
@@ -791,14 +826,22 @@ func (t *Tensor) Minimum(min float64) {
 		return v
 	})
 }
-
+func Apply(t *Tensor, fn func(v float64) float64) *Tensor {
+	nt := t.DeepClone()
+	nt.Apply(fn)
+	return nt
+}
 func (t *Tensor) Apply(fn func(v float64) float64) {
 	size := numElements(t.shape)
 	for i := 0; i < size; i++ {
 		t.data[i+t.offset] = fn(t.data[i+t.offset])
 	}
 }
-
+func ApplyPos(t *Tensor, fn func(pos []int, v float64) float64) *Tensor {
+	nt := t.DeepClone()
+	nt.ApplyPos(fn)
+	return nt
+}
 func (t *Tensor) ApplyPos(fn func(pos []int, v float64) float64) {
 	size := numElements(t.shape)
 	for i := 0; i < size; i++ {
@@ -807,7 +850,21 @@ func (t *Tensor) ApplyPos(fn func(pos []int, v float64) float64) {
 	}
 }
 
-func ApplyPair(t, other *Tensor, fn func(idx int, v, ov float64) float64) *Tensor {
+// ApplyPair for mask func etc...
+func ApplyPair(dst, src *Tensor, fn func(dst, src float64) float64) {
+	if !testEqInt(src.shape, dst.shape) {
+		panic(fmt.Errorf("src and dst muse save dim and shape"))
+	}
+	size := numElements(src.shape)
+	for i := 0; i < size; i++ {
+		pos := index2pos(i, src.shape, src.Strides)
+		v := dst.Get(pos...)
+		ov := src.Get(pos...)
+		dst.Set(fn(v, ov), pos...)
+	}
+}
+
+func ApplyBroadcast(t, other *Tensor, fn func(idx int, v, ov float64) float64) *Tensor {
 	if !isBraadcastable(t.shape, other.shape) {
 		panic(fmt.Errorf("calc tensor shape must isBraadcastable"))
 	}
@@ -827,7 +884,7 @@ func ApplyPair(t, other *Tensor, fn func(idx int, v, ov float64) float64) *Tenso
 	return nt
 }
 
-//func (t *Tensor) ApplyPair(other *Tensor, fn func(idx int, v, ov float64) float64) {
+//func (t *Tensor) ApplyBroadcast(other *Tensor, fn func(idx int, v, ov float64) float64) {
 //	if !isBraadcastable(t.shape, other.shape) {
 //		panic(fmt.Errorf("calc tensor shape must isBraadcastable"))
 //	}
@@ -838,7 +895,7 @@ func ApplyPair(t, other *Tensor, fn func(idx int, v, ov float64) float64) *Tenso
 //	if ySize > size {
 //		calcPaire(other, t, fn)
 //		//todo 这里目前为了效率使用的浅拷贝，复用了底层的data
-//		t.CloneFrom(other)
+//		t.Copy(other)
 //	} else {
 //		calcPaire(t, other, fn)
 //	}
@@ -907,7 +964,7 @@ func padTensor(pad int, t *Tensor) *Tensor {
 
 //argMax todo for cuda
 func argMax(t, ot, idt *Tensor, idm int) *Tensor {
-	nt := ApplyPair(t, ot, func(idx int, v, ov float64) float64 {
+	nt := ApplyBroadcast(t, ot, func(idx int, v, ov float64) float64 {
 		if v < ov {
 			pos := index2pos(idx, idt.shape, idt.Strides)
 			idt.Set(float64(idm), pos...)

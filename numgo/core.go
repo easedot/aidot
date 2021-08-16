@@ -1,24 +1,23 @@
 package numgo
 
 import (
-	"fmt"
 	"sort"
 
 	nd "test_ai/numed"
-	ut "test_ai/utils"
+	nt "test_ai/tensor"
 )
 
 var Backprop = true
 
-func NewArange(start, stop, step float64) *Variable {
-	s := ut.Arange(start, stop, step)
-	return NewVec(s...)
-}
-
-func NewZeros(r, c int) *Variable {
-	s := make([]float64, r*c)
-	return NewMat(r, c, s...)
-}
+//func NewArange(start, stop, step float64) *Variable {
+//	s := ut.Arange(start, stop, step)
+//	return NewVec(s...)
+//}
+//
+//func NewZeros(r, c int) *Variable {
+//	s := make([]float64, r*c)
+//	return NewMat(r, c, s...)
+//}
 
 //func NewOnes(r,c int) *Variable {
 //	d := make([]float64, r*c)
@@ -28,41 +27,53 @@ func NewZeros(r, c int) *Variable {
 //	return NewMat(r,c,d...)
 //}
 
-func NewRand(r, c int) *Variable {
-	s := ut.Rand(r, c)
-	return NewMat(r, c, s...)
-}
-func NewRandN(r, c int) *Variable {
-	s := ut.RandN(r, c)
-	return NewMat(r, c, s...)
-}
-func NewRandE(r, c int) *Variable {
-	s := ut.RandE(r, c)
-	return NewMat(r, c, s...)
-}
+//func NewRand(r, c int) *Variable {
+//	s := ut.Rand(r, c)
+//	return NewMat(r, c, s...)
+//}
+//func NewRandN(r, c int) *Variable {
+//	s := ut.RandN(r, c)
+//	return NewMat(r, c, s...)
+//}
+//func NewRandE(r, c int) *Variable {
+//	s := ut.RandE(r, c)
+//	return NewMat(r, c, s...)
+//}
 func NewVar(d float64) *Variable {
-	dv := nd.NewVar(d)
+	dv := nt.NewVar(d)
 	return &Variable{Data: dv}
 }
 func NewVec(d ...float64) *Variable {
-	dv := nd.NewVec(d...)
+	dv := nt.NewVec(d...)
 	return &Variable{Data: dv}
 }
-func NewVecInt(d ...int) *Variable {
-	dv := nd.NewVecInt(d...)
+
+//func NewVecInt(d ...int) *Variable {
+//	dv := nd.NewVecInt(d...)
+//	return &Variable{Data: dv}
+//}
+func NewMat(d []float64, pos ...int) *Variable {
+	dv := nt.NewData(d, pos...)
 	return &Variable{Data: dv}
 }
-func NewMat(r, c int, d ...float64) *Variable {
-	dv := nd.NewMat(r, c, d...)
-	return &Variable{Data: dv}
-}
-func CopyData(v *Variable) *Variable {
-	return &Variable{Data: v.Data}
+
+//func CopyData(v *Variable) *Variable {
+//	return &Variable{Data: v.Data}
+//}
+
+func NewVariable(data *nt.Tensor, name ...string) *Variable {
+	v := &Variable{}
+	if len(name) > 0 {
+		v = &Variable{Data: data, Name: name[0]}
+	} else {
+		v = &Variable{Data: data}
+	}
+	return v
 }
 
 type Variable struct {
 	Name    string
-	Data    *nd.NumEd
+	Data    *nt.Tensor
 	Grad    *Variable
 	Creator *Function
 	Level   int
@@ -72,8 +83,7 @@ func (v *Variable) Plot(verbose bool, file string) {
 	PlotDotGraph(v, verbose, file)
 }
 func (v *Variable) ReShape(r, c int) *Variable {
-	s := nd.NewShape(r, c)
-	return Reshape(v, s)
+	return Reshape(v, r, c)
 }
 func (v *Variable) Transpose() *Variable {
 	return Transpose(v)
@@ -106,7 +116,7 @@ func (v *Variable) UnchainBackward() {
 }
 func (v *Variable) Backward(retainGrad bool) {
 	if v.Grad == nil {
-		v.Grad = &Variable{Data: nd.LikeOnes(v.Data)}
+		v.Grad = NewVariable(nt.LikeOnes(v.Data))
 	}
 	seen := make(map[*Function]bool)
 	var stack []*Function
@@ -143,16 +153,6 @@ func (v *Variable) Backward(retainGrad bool) {
 		}
 	}
 }
-
-func (v *Variable) At(r, c int) float64 {
-	return v.Data.At(r, c)
-}
-func (v *Variable) DataType() string {
-	return fmt.Sprintf("%T", v.Data.At(0, 0))
-}
-func (v *Variable) Shape() *nd.Shape {
-	return nd.NewShape(v.Data.Dims())
-}
 func (v *Variable) Print(name string) {
 	if name != "" {
 		v.Data.Print(name)
@@ -169,18 +169,29 @@ func (v *Variable) Sprint(name string) string {
 	}
 	return rest
 }
-func (v *Variable) T() *Variable {
-	return Transpose(v)
-}
-func (v *Variable) Rows(rs ...int) *Variable {
-	return &Variable{Data: v.Data.Rows(rs...)}
-}
-func (v *Variable) Var() float64 {
-	return v.Data.Var()
-}
-func (v *Variable) Mean() float64 {
-	return v.Data.Mean().Var()
-}
+
+//func (v *Variable) At(r, c int) float64 {
+//	return v.Data.Get(r, c)
+//}
+
+//func (v *Variable) DataType() string {
+//	return fmt.Sprintf("%T", v.Data.At(0, 0))
+//}
+//func (v *Variable) Shape() *nd.Shape {
+//	return nd.NewShape(v.Data.Dims())
+//}
+//func (v *Variable) T() *Variable {
+//	return Transpose(v)
+//}
+//func (v *Variable) Rows(rs ...int) *Variable {
+//	return &Variable{Data: v.Data.Rows(rs...)}
+//}
+//func (v *Variable) Var() float64 {
+//	return v.Data.Var()
+//}
+//func (v *Variable) Mean() float64 {
+//	return v.Data.Mean().Var()
+//}
 
 // NewFunction Function
 func NewFunction(f IFunc) Function {
@@ -234,12 +245,13 @@ type powFunc struct {
 
 func (s *powFunc) forward(i []*Variable) []*Variable {
 	x := i[0]
-	o := x.Data.Pow(s.C)
+	//x.Data.Pow(s.C)
+	o := nt.Pow(x.Data, s.C)
 	return []*Variable{{Data: o}}
 }
 func (s *powFunc) backward(i, o, gy []*Variable) []*Variable {
 	x := i[0]
-	c := NewVar(float64(s.C))
+	c := NewVariable(nt.NewVar(float64(s.C)))
 	gx := Mul(Mul(Pow(x, s.C-1), gy[0]), c)
 	return []*Variable{gx}
 }
@@ -256,7 +268,8 @@ type negFunc struct {
 
 func (e *negFunc) forward(i []*Variable) []*Variable {
 	x := i[0]
-	o := x.Data.Neg()
+	//x.Data.Neg()
+	o := nt.Neg(x.Data)
 	return []*Variable{{Data: o}}
 }
 func (e *negFunc) backward(i, o, gy []*Variable) []*Variable {
@@ -277,13 +290,13 @@ type addFunc struct {
 
 func (a *addFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
-	o := nd.Add(x0.Data, x1.Data)
+	o := nt.Add(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
 func (a *addFunc) backward(i, o, gy []*Variable) []*Variable {
 	gx0, gx1 := gy[0], gy[0]
 	x0, x1 := i[0], i[1]
-	gx0, gx1 = _checkSumTo(x0.Shape(), x1.Shape(), gx0, gx1)
+	gx0, gx1 = _checkSumTo(x0.Data.Shape(), x1.Data.Shape(), gx0, gx1)
 	return []*Variable{gx0, gx1}
 }
 
@@ -300,14 +313,14 @@ type subFunc struct {
 
 func (a *subFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
-	o := nd.Sub(x0.Data, x1.Data)
+	o := nt.Sub(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
 func (a *subFunc) backward(i, o, gy []*Variable) []*Variable {
 	g := gy[0]
 	x0, x1 := i[0], i[1]
 	gx0, gx1 := g, Neg(g)
-	gx0, gx1 = _checkSumTo(x0.Shape(), x1.Shape(), gx0, gx1)
+	gx0, gx1 = _checkSumTo(x0.Data.Shape(), x1.Data.Shape(), gx0, gx1)
 	return []*Variable{gx0, gx1}
 }
 
@@ -326,7 +339,7 @@ type mulFunc struct {
 
 func (m *mulFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
-	o := nd.Mul(x0.Data, x1.Data)
+	o := nt.Mul(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
 func (m *mulFunc) backward(i, o, gy []*Variable) []*Variable {
@@ -334,7 +347,7 @@ func (m *mulFunc) backward(i, o, gy []*Variable) []*Variable {
 	x0, x1 := i[0], i[1]
 	gx0 := Mul(x1, g)
 	gx1 := Mul(x0, g)
-	gx0, gx1 = _checkSumTo(x0.Shape(), x1.Shape(), gx0, gx1)
+	gx0, gx1 = _checkSumTo(x0.Data.Shape(), x1.Data.Shape(), gx0, gx1)
 	return []*Variable{gx0, gx1}
 }
 
@@ -351,7 +364,7 @@ type divFunc struct {
 
 func (d *divFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
-	o := nd.Div(x0.Data, x1.Data)
+	o := nt.Div(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
 func (d *divFunc) backward(i, o, gy []*Variable) []*Variable {
@@ -359,7 +372,7 @@ func (d *divFunc) backward(i, o, gy []*Variable) []*Variable {
 	x0, x1 := i[0], i[1]
 	gx0 := Div(g, x1)
 	gx1 := Mul(g, Div(Neg(x0), Mul(x1, x1)))
-	gx0, gx1 = _checkSumTo(x0.Shape(), x1.Shape(), gx0, gx1)
+	gx0, gx1 = _checkSumTo(x0.Data.Shape(), x1.Data.Shape(), gx0, gx1)
 	return []*Variable{gx0, gx1}
 }
 

@@ -10,20 +10,20 @@ import (
 
 	"gonum.org/v1/gonum/mat"
 	"test_ai/intset"
-	nd "test_ai/numed"
+	nt "test_ai/tensor"
 	ut "test_ai/utils"
 )
 
 func AsVar(v interface{}) *Variable {
 	switch v.(type) {
-	case *nd.NumEd:
-		return &Variable{Data: v.(*nd.NumEd)}
+	case *nt.Tensor:
+		return &Variable{Data: v.(*nt.Tensor)}
 	case float64:
-		return NewVar(v.(float64))
+		return NewVariable(nt.NewVar(v.(float64)))
 	case *Variable:
 		return v.(*Variable)
 	case int:
-		return NewVar(float64(v.(int)))
+		return NewVariable(nt.NewVar(v.(float64)))
 	default:
 		logger.Printf("input type error")
 		return nil
@@ -33,9 +33,9 @@ func AsVar(v interface{}) *Variable {
 type condFunc func(x, y *Variable, r, c int)
 
 func _where(x, y *Variable, cond condFunc) *Variable {
-	shape := x.Shape()
-	for i := 0; i < shape.R; i++ {
-		for j := 0; j < shape.C; j++ {
+	shape := x.Data.Shape()
+	for i := 0; i < shape[0]; i++ {
+		for j := 0; j < shape[1]; j++ {
 			cond(x, y, i, j)
 		}
 	}
@@ -69,21 +69,21 @@ func _where(x, y *Variable, cond condFunc) *Variable {
 //	return &Variable{Data:y}
 //}
 
-func _sumTo(x *Variable, s *nd.Shape) *Variable {
-	y := NewMat(s.R, s.C)
-	if s.R == 1 && s.C == 1 {
-		y.Data = x.Data.Sum(nil, true)
+func _sumTo(x *Variable, s []int) *Variable {
+	y := AsVar(nt.NewZeros(s...))
+	if s[0] == 1 && s[1] == 1 {
+		y.Data = nt.NewVar(x.Data.Sum())
 	}
-	if s.R == 1 && s.C != 1 {
-		y.Data = x.Data.Sum(0, true)
+	if s[0] == 1 && s[1] != 1 {
+		y.Data = x.Data.SumTo(0, true)
 	}
-	if s.C == 1 && s.R != 1 {
-		y.Data = x.Data.Sum(1, true)
+	if s[1] == 1 && s[0] != 1 {
+		y.Data = x.Data.SumTo(1, true)
 	}
 	return y
 }
 
-func _logsumexp(x *Variable, axis interface{}) *Variable {
+func _logsumexp(x *Variable, axis int) *Variable {
 	m := Max(x, axis)
 	y := Sub(x, m)
 	y = Exp(y)
@@ -94,9 +94,8 @@ func _logsumexp(x *Variable, axis interface{}) *Variable {
 }
 
 func _maxBackwardShape(x *Variable, axis interface{}) []int {
-	n := x.Shape()
+	n := x.Data.Shape()
 	is := intset.IntSet{}
-	en := []int{n.R, n.C}
 	if axis == nil {
 		r := ut.ArangeInt(0, 2, 1)
 		is.AddAll(r...)
@@ -109,7 +108,7 @@ func _maxBackwardShape(x *Variable, axis interface{}) []int {
 		}
 	}
 	var s []int
-	for i, v := range en {
+	for i, v := range n {
 		if !is.Has(i) {
 			s = append(s, v)
 		} else {
@@ -120,16 +119,16 @@ func _maxBackwardShape(x *Variable, axis interface{}) []int {
 }
 
 func _eyes(n int) *Variable {
-	d := nd.NewEyes(n)
+	d := nt.NewEyes(n)
 	return &Variable{Data: d}
 }
 
-func _sum(x *Variable, axis interface{}, keepDims bool) *Variable {
-	y := x.Data.Sum(axis, keepDims)
+func _sum(x *Variable, axis int, keepDims bool) *Variable {
+	y := x.Data.SumTo(axis, keepDims)
 	return &Variable{Data: y}
 }
-func _min(x *Variable, axis interface{}, keepDims bool) *Variable {
-	y := x.Data.Min(axis, keepDims)
+func _min(x *Variable, axis int, keepDims bool) *Variable {
+	y := x.Data.MinTo(axis, keepDims)
 	return &Variable{Data: y}
 }
 
@@ -141,15 +140,15 @@ func _agrMax(x *Variable, axis int, keepDims bool) *Variable {
 	y := x.Data.ArgMax(axis, keepDims)
 	return &Variable{Data: y}
 }
-func _max(x *Variable, axis interface{}, keepDims bool) *Variable {
-	y := x.Data.Max(axis, keepDims)
+func _max(x *Variable, axis int, keepDims bool) *Variable {
+	y := x.Data.MaxTo(axis, keepDims)
 	return &Variable{Data: y}
 }
 
 type RowColFunc func(x, y, iy *mat.Dense, r, c, idx int)
 
 func OneHot(x *Variable, rs []int) *Variable {
-	m := x.Data.Rows(rs...)
+	m := x.Data.Slices(0, rs...)
 	return &Variable{Data: m}
 }
 func SelRow(x *mat.Dense, rs ...int) *mat.Dense {
@@ -202,42 +201,42 @@ func Cross(x, y *mat.Dense) *mat.Dense {
 }
 
 func MeshGrid(x, y *Variable) (*Variable, *Variable) {
-	xs := x.Shape()
-	ys := y.Shape()
-	sp := nd.NewShape(ys.C, xs.C)
-	y = y.T()
+	xs := x.Data.Shape()
+	ys := y.Data.Shape()
+	sp := []int{ys[1], xs[1]}
+	y = NewVariable(y.Data.T())
 	xm := _broadcastTo(x, sp)
 	ym := _broadcastTo(y, sp)
 	return xm, ym
 }
 
-func _broadcastTo(x *Variable, s *nd.Shape) *Variable {
+func _broadcastTo(x *Variable, s []int) *Variable {
 	y := x.Data.BroadcastTo(s)
 	return &Variable{Data: y}
 }
-func _checkBroadCast(x0s *nd.Shape, x1s *nd.Shape, x0 *Variable, x1 *Variable) (*Variable, *Variable) {
+func _checkBroadCast(x0s []int, x1s []int, x0 *Variable, x1 *Variable) (*Variable, *Variable) {
 	if !x0s.E(x1s) {
 		if x0s.B(x1s) {
-			x1 = BroadCastTo(x1, x0s)
+			x1 = BroadCastTo(x1, x0s...)
 		}
 		if x1s.B(x0s) {
-			x0 = BroadCastTo(x0, x1s)
+			x0 = BroadCastTo(x0, x1s...)
 		}
 	}
 	return x0, x1
 }
 func _checkSumToV(gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
-	x0s, x1s := gx0.Shape(), gx1.Shape()
+	x0s, x1s := gx0.Data.Shape(), gx1.Data.Shape()
 	x0, x1 := _checkSumTo(x0s, x1s, gx0, gx1)
 	return x0, x1
 }
-func _checkSumTo(x0s *nd.Shape, x1s *nd.Shape, gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
+func _checkSumTo(x0s []int, x1s []int, gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
 	if !x0s.E(x1s) {
 		if x0s.B(x1s) { //x1 做过broadcast
-			gx1 = SumTo(gx1, x1s)
+			gx1 = SumTo(gx1, x1s...)
 		}
 		if x1s.B(x0s) { //x0 做过broadcast
-			gx0 = SumTo(gx0, x0s)
+			gx0 = SumTo(gx0, x0s...)
 		}
 	}
 	return gx0, gx1
@@ -245,29 +244,29 @@ func _checkSumTo(x0s *nd.Shape, x1s *nd.Shape, gx0 *Variable, gx1 *Variable) (*V
 
 func NumericalDiff(f func(i *Variable) *Variable, x *Variable) *Variable {
 	eps := 1e-6
-	grad := nd.LikeZeros(x.Data)
-	xs := x.Shape()
-	for i := 0; i < xs.R; i++ {
-		for j := 0; j < xs.C; j++ {
-			tempV := x.Data.At(i, j)
+	grad := nt.LikeZeros(x.Data)
+	xs := x.Data.Shape()
+	for i := 0; i < xs[0]; i++ {
+		for j := 0; j < xs[1]; j++ {
+			tempV := x.Data.Get(i, j)
 			y3 := f(x)
-			x.Data.Set(i, j, tempV+eps)
+			x.Data.Set(tempV+eps, i, j)
 			y1 := f(x)
-			x.Data.Set(i, j, tempV-eps)
+			x.Data.Set(tempV-eps, i, j)
 			y2 := f(x)
 			sub := Sub(y1, y2)
 			diff := Sum(sub)
-			diffV := diff.Data.At(0, 0)
+			diffV := diff.Data.Get(0, 0)
 			g := diffV / (2.0 * eps)
 			//这里处理max，min的特殊情况，如果3-eps,但是y没有减小，因为max返回最大值了
-			if nd.Equal(y1.Data, y3.Data, 1e-8) || nd.Equal(y2.Data, y3.Data, 1e-8) {
+			if nt.DeepEqual(y1.Data, y3.Data, 1e-8) || nt.DeepEqual(y2.Data, y3.Data, 1e-8) {
 				//if mat.EqualApprox(y1.Data,y3.Data,1e-8) || mat.EqualApprox(y2.Data,y3.Data,1e-8){
 				g = diffV / (1.0 * eps)
 			}
 
-			grad.Set(i, j, g)
+			grad.Set(g, i, j)
 
-			x.Data.Set(i, j, tempV)
+			x.Data.Set(tempV, i, j)
 		}
 	}
 	return &Variable{Data: grad}
@@ -278,9 +277,7 @@ func dotVar(v *Variable, verbose bool) string {
 		if name != "" {
 			name += ":"
 		}
-		vs := v.Shape()
-		r, c := vs.R, vs.C
-		name = fmt.Sprintf("%s (%d,%d) %s", name, r, c, v.DataType())
+		name = fmt.Sprintf("%s %v %s", name, v.Data.Shape(), v.Data.DataType())
 	}
 	dotVar := fmt.Sprintf(" \"%p\" [label=\"%s\", color=orange,style=filled]\n", v, name)
 	return dotVar

@@ -2,6 +2,8 @@ package numgo
 
 import (
 	"math"
+
+	nt "test_ai/tensor"
 )
 
 type ILayer interface {
@@ -46,7 +48,7 @@ func NewLinear(inSize, outSize int, haveBias bool, active ActiveFunc) *Layer {
 	}
 
 	if haveBias {
-		zb := NewZeros(1, layer.O)
+		zb := AsVar(nt.NewZeros(1, layer.O))
 		zb.Name = "b"
 		layer.b = zb
 		layer.Params["b"] = layer.b
@@ -68,11 +70,11 @@ func (l *linearLayer) resetState() {
 }
 
 func (l *linearLayer) initW() {
-	var InitWFunc = func(_, _ int, v float64) float64 {
+	var InitWFunc = func(v float64) float64 {
 		return v * math.Sqrt(1/float64(l.I))
 	}
 	//var InitWFunc=func(_,_ int,v float64) float64{return v*0.01}
-	w := NewRandN(l.I, l.O)
+	w := NewVariable(nt.NewRandNorm(l.I, l.O))
 	w.Data.Apply(InitWFunc)
 	l.W.Data = w.Data
 }
@@ -84,7 +86,7 @@ func (l *linearLayer) setParams(p map[string]*Variable) {
 }
 func (l *linearLayer) forward(x *Variable) *Variable {
 	if l.W.Data == nil {
-		l.I = x.Shape().C
+		l.I = x.Data.Shape()[1]
 		l.initW()
 	}
 	y := Linear(x, l.W, l.b)

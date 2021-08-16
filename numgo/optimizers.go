@@ -3,7 +3,7 @@ package numgo
 import (
 	"math"
 
-	nd "test_ai/numed"
+	nt "test_ai/tensor"
 )
 
 func SGD(lr float64) IUpdateGrad {
@@ -20,7 +20,7 @@ type sGD struct {
 }
 
 func (s sGD) updateGrad(v *Variable) {
-	v.Data = nd.Sub(v.Data, nd.Mul(s.Lr, v.Grad.Data))
+	v.Data = nt.Sub(v.Data, nt.Mul(nt.NewVar(s.Lr), v.Grad.Data))
 }
 
 func Adam(alpha, beta1, beta2, eps float64) IUpdateGrad {
@@ -33,8 +33,8 @@ func Adam(alpha, beta1, beta2, eps float64) IUpdateGrad {
 		vs:    make(map[*Variable]*Variable),
 		eps:   eps,
 	}
-	adm.applyLr = func(_, _ int, v float64) float64 { return v * adm.Lr() }
-	adm.applySqrt = func(_, _ int, v float64) float64 { return math.Sqrt(v) + eps }
+	adm.applyLr = func(v float64) float64 { return v * adm.Lr() }
+	adm.applySqrt = func(v float64) float64 { return math.Sqrt(v) + eps }
 	return adm
 }
 
@@ -43,8 +43,8 @@ type aDam struct {
 	alpha, beta1, beta2, eps float64
 	ms                       map[*Variable]*Variable
 	vs                       map[*Variable]*Variable
-	applyLr                  nd.EachFunc
-	applySqrt                nd.EachFunc
+	applyLr                  nt.EachFunc
+	applySqrt                nt.EachFunc
 }
 
 func (a *aDam) Lr() float64 {
@@ -55,14 +55,14 @@ func (a *aDam) Lr() float64 {
 func (a *aDam) updateGrad(param *Variable) {
 	a.t += 1
 	if _, ok := a.ms[param]; !ok {
-		a.ms[param] = &Variable{Data: nd.LikeZeros(param.Data)}
-		a.vs[param] = &Variable{Data: nd.LikeZeros(param.Data)}
+		a.ms[param] = &Variable{Data: nt.LikeZeros(param.Data)}
+		a.vs[param] = &Variable{Data: nt.LikeZeros(param.Data)}
 	}
 	m, v := a.ms[param].Data, a.vs[param].Data
 	g := param.Grad.Data
-	m = nd.Add(m, nd.Mul(1-a.beta1, nd.Sub(g, m)))
-	v = nd.Add(v, nd.Mul(1+a.beta2, nd.Sub(nd.Mul(g, g), v)))
+	m = nt.Add(m, nt.Mul(nt.NewVar(1-a.beta1), nt.Sub(g, m)))
+	v = nt.Add(v, nt.Mul(nt.NewVar(1+a.beta2), nt.Sub(nt.Mul(g, g), v)))
 	m.Apply(a.applyLr)
 	v.Apply(a.applySqrt)
-	param.Data = nd.Sub(param.Data, nd.Div(m, v))
+	param.Data = nt.Sub(param.Data, nt.Div(m, v))
 }

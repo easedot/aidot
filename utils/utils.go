@@ -143,6 +143,26 @@ func Eyes(n int) *mat.Dense {
 	}
 	return d
 }
+func PadDims(x, y []int) ([]int, []int) {
+	if len(x) == len(y) {
+		return x, y
+	} else if len(x) > len(y) {
+		yn := FillDims(1, len(x))
+		copy(yn[len(y):], y)
+		return x, yn
+	} else {
+		xn := FillDims(1, len(y))
+		copy(xn[len(x):], x)
+		return xn, y
+	}
+}
+func FillDims(fill int, dims int) []int {
+	nt := make([]int, dims)
+	for di := range nt {
+		nt[di] = fill
+	}
+	return nt
+}
 
 func LikeOnes(i *mat.Dense) *mat.Dense {
 	r, c := i.Dims()
@@ -330,6 +350,9 @@ func Linspace(start, end float64, count int) (ret []float64) {
 	}
 	return
 }
+func remove(slice []int, s int) []int {
+	return append(slice[:s], slice[s+1:]...)
+}
 func RandUniformFloats(min, max float64, n int) []float64 {
 	res := make([]float64, n)
 	for i := range res {
@@ -343,6 +366,66 @@ func Float64ToInt(ar []float64) []int {
 		newar[i] = int(v)
 	}
 	return newar
+}
+
+func Reverse(arr []int) {
+	l := len(arr)
+	for i := 0; i < l/2; i++ {
+		j := l - 1 - i
+		arr[i], arr[j] = arr[j], arr[i]
+	}
+}
+
+func Sum(input []float64) float64 {
+	sum := 0.0
+
+	for _, i := range input {
+		sum += i
+	}
+	return sum
+}
+func IsEq(a, b []float64, e ...float64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	eps := 1e-4
+	if len(e) > 0 {
+		eps = e[0]
+	}
+	for i := range a {
+		if math.Abs(a[i]-b[i]) > eps {
+			return false
+		}
+	}
+	return true
+}
+
+func IsEqInt(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+func IsGInt(a, b []int) bool {
+	if len(a) > len(b) {
+		return true
+	}
+	for i := range a {
+		if a[i] > b[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func Remove(slice []int, i int) []int {
+	copy(slice[i:], slice[i+1:])
+	return slice[:len(slice)-1]
 }
 
 //t:=ng.NewVar(1)

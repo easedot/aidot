@@ -3,8 +3,8 @@ package numgo
 import (
 	"sort"
 
-	nd "test_ai/numed"
 	nt "test_ai/tensor"
+	ut "test_ai/utils"
 )
 
 var Backprop = true
@@ -85,9 +85,10 @@ func (v *Variable) Plot(verbose bool, file string) {
 func (v *Variable) ReShape(r, c int) *Variable {
 	return Reshape(v, r, c)
 }
-func (v *Variable) Transpose() *Variable {
-	return Transpose(v)
-}
+
+//func (v *Variable) Transpose() *Variable {
+//	return Transpose(v)
+//}
 func (v *Variable) ClearGrade() {
 	v.Grad = nil
 }
@@ -286,17 +287,23 @@ func Add(x0, x1 interface{}) *Variable {
 
 type addFunc struct {
 	Function
+	x0s, x1s []int
 }
 
 func (a *addFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
+	a.x0s, a.x1s = x0.Data.Shape(), x1.Data.Shape()
 	o := nt.Add(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
 func (a *addFunc) backward(i, o, gy []*Variable) []*Variable {
 	gx0, gx1 := gy[0], gy[0]
-	x0, x1 := i[0], i[1]
-	gx0, gx1 = _checkSumTo(x0.Data.Shape(), x1.Data.Shape(), gx0, gx1)
+	if !ut.IsEqInt(gx0.Data.Shape(), a.x0s) {
+		gx0 = SumTo(gx0, a.x0s...)
+	}
+	if !ut.IsEqInt(gx1.Data.Shape(), a.x1s) {
+		gx1 = SumTo(gx1, a.x1s...)
+	}
 	return []*Variable{gx0, gx1}
 }
 
@@ -309,18 +316,24 @@ func Sub(x0, x1 interface{}) *Variable {
 
 type subFunc struct {
 	Function
+	x0s, x1s []int
 }
 
 func (a *subFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
+	a.x0s, a.x1s = x0.Data.Shape(), x1.Data.Shape()
 	o := nt.Sub(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
 func (a *subFunc) backward(i, o, gy []*Variable) []*Variable {
 	g := gy[0]
-	x0, x1 := i[0], i[1]
 	gx0, gx1 := g, Neg(g)
-	gx0, gx1 = _checkSumTo(x0.Data.Shape(), x1.Data.Shape(), gx0, gx1)
+	if !ut.IsEqInt(gx0.Data.Shape(), a.x0s) {
+		gx0 = SumTo(gx0, a.x0s...)
+	}
+	if !ut.IsEqInt(gx1.Data.Shape(), a.x1s) {
+		gx1 = SumTo(gx1, a.x1s...)
+	}
 	return []*Variable{gx0, gx1}
 }
 
@@ -333,12 +346,12 @@ func Mul(x0, x1 interface{}) *Variable {
 
 type mulFunc struct {
 	Function
-	x0s *nd.Shape
-	x1s *nd.Shape
+	x0s, x1s []int
 }
 
 func (m *mulFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
+	m.x0s, m.x1s = x0.Data.Shape(), x1.Data.Shape()
 	o := nt.Mul(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
@@ -347,7 +360,12 @@ func (m *mulFunc) backward(i, o, gy []*Variable) []*Variable {
 	x0, x1 := i[0], i[1]
 	gx0 := Mul(x1, g)
 	gx1 := Mul(x0, g)
-	gx0, gx1 = _checkSumTo(x0.Data.Shape(), x1.Data.Shape(), gx0, gx1)
+	if !ut.IsEqInt(gx0.Data.Shape(), m.x0s) {
+		gx0 = SumTo(gx0, m.x0s...)
+	}
+	if !ut.IsEqInt(gx1.Data.Shape(), m.x1s) {
+		gx1 = SumTo(gx1, m.x1s...)
+	}
 	return []*Variable{gx0, gx1}
 }
 
@@ -360,10 +378,13 @@ func Div(x0, x1 interface{}) *Variable {
 
 type divFunc struct {
 	Function
+	x0s, x1s []int
 }
 
 func (d *divFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
+	d.x0s, d.x1s = x0.Data.Shape(), x1.Data.Shape()
+
 	o := nt.Div(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
@@ -372,7 +393,12 @@ func (d *divFunc) backward(i, o, gy []*Variable) []*Variable {
 	x0, x1 := i[0], i[1]
 	gx0 := Div(g, x1)
 	gx1 := Mul(g, Div(Neg(x0), Mul(x1, x1)))
-	gx0, gx1 = _checkSumTo(x0.Data.Shape(), x1.Data.Shape(), gx0, gx1)
+	if !ut.IsEqInt(gx0.Data.Shape(), d.x0s) {
+		gx0 = SumTo(gx0, d.x0s...)
+	}
+	if !ut.IsEqInt(gx1.Data.Shape(), d.x1s) {
+		gx1 = SumTo(gx1, d.x1s...)
+	}
 	return []*Variable{gx0, gx1}
 }
 

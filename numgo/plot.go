@@ -9,28 +9,28 @@ import (
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 	"gonum.org/v1/plot/vg/draw"
-	nd "test_ai/numed"
+	nt "test_ai/tensor"
 )
 
 type UnitGrid struct {
-	XX, YY, ZZ *nd.NumEd
+	XX, YY, ZZ *nt.Tensor
 }
 
-func (g UnitGrid) Dims() (c, r int)   { r, c = g.XX.Dims(); return c, r }
-func (g UnitGrid) Z(c, r int) float64 { return g.ZZ.At(r, c) }
+func (g UnitGrid) Dims() (c, r int)   { r, c = g.XX.Shape()[0], g.XX.Shape()[1]; return c, r }
+func (g UnitGrid) Z(c, r int) float64 { return g.ZZ.Get(r, c) }
 func (g UnitGrid) X(c int) float64 {
-	_, n := g.XX.Dims()
-	if c < 0 || c >= n {
+	n := g.XX.Shape()
+	if c < 0 || c >= n[1] {
 		panic("index out of range")
 	}
-	return g.XX.At(0, c)
+	return g.XX.Get(0, c)
 }
 func (g UnitGrid) Y(r int) float64 {
-	m, _ := g.XX.Dims()
-	if r < 0 || r >= m {
+	m := g.XX.Shape()
+	if r < 0 || r >= m[0] {
 		panic("index out of range")
 	}
-	return g.YY.At(r, 0)
+	return g.YY.Get(r, 0)
 }
 
 type EdThumbnailer struct {

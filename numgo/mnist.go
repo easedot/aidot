@@ -15,10 +15,10 @@ import (
 
 	"github.com/cheggaaa/pb/v3"
 	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/palette"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 	nd "test_ai/numed"
+	nt "test_ai/tensor"
 	ut "test_ai/utils"
 )
 
@@ -126,7 +126,7 @@ func (m *mnist) loadLabel(filePath string) []float64 {
 	return t
 }
 
-func (m *mnist) loadData(filePath string) (*nd.NumEd, error) {
+func (m *mnist) loadData(filePath string) (*nt.Tensor, error) {
 	filename, _, err := fetch(filePath)
 	if err != nil {
 		panic(err)
@@ -145,7 +145,8 @@ func (m *mnist) loadData(filePath string) (*nd.NumEd, error) {
 		_, _, d := ut.Flatten(v.Slice())
 		t[i] = d
 	}
-	d := nd.NewDense(ut.Flatten(t))
+	dr, dc, dd := ut.Flatten(t)
+	d := nt.NewData(dd, dr, dc)
 	return d, nil
 }
 func (m *mnist) show(r, c int) {
@@ -289,39 +290,40 @@ func PrintImageF(image []float64, tt int) {
 		}
 	}
 }
-func PrintI(image []float64, tt int) {
-	x := nd.NewArange(0, 27, 1)
-	y := nd.NewArange(0, 27, 1)
-	xx, yy := nd.MeshGrid(x, y)
-	data := nd.NewVec(image...)
-	data = data.Reshape(28, 28)
-	zz := nd.NewMat(28, 28)
-	for i := 0; i < 28; i++ {
-		for j := 0; j < 28; j++ {
-			fmt.Printf("i:%d,j%d", i, j)
-			zz.Set(i, j, data.Get(i, j))
-		}
-	}
-	ug := UnitGrid{xx, yy, zz}
-	var pls []plot.Plotter
-	c := plotter.NewContour(
-		ug,
-		nil,
-		palette.Rainbow(10, palette.Blue, palette.Red, 1, 1, 1),
-	)
-	pls = append(pls, c)
-	p := plot.New()
-	p.Title.Text = "Plotutil example"
-	p.X.Label.Text = "X"
-	p.Y.Label.Text = "Y"
-	p.Add(plotter.NewGrid())
 
-	p.Add(pls...)
-	if err := p.Save(10*vg.Inch, 6*vg.Inch, fmt.Sprintf("./temp/%d.png", tt)); err != nil {
-		panic(err)
-	}
-
-}
+//func PrintI(image []float64, tt int) {
+//	x := nt.NewArange(0, 27, 1)
+//	y := nt.NewArange(0, 27, 1)
+//	xx, yy := nd.MeshGrid(x, y)
+//	data := nt.NewVec(image...)
+//	data = data.Reshape(28, 28)
+//	zz := nt.NewZeros(28, 28)
+//	for i := 0; i < 28; i++ {
+//		for j := 0; j < 28; j++ {
+//			fmt.Printf("i:%d,j%d", i, j)
+//			zz.Set(data.Get(i, j), i, j)
+//		}
+//	}
+//	ug := UnitGrid{xx, yy, zz}
+//	var pls []plot.Plotter
+//	c := plotter.NewContour(
+//		ug,
+//		nil,
+//		palette.Rainbow(10, palette.Blue, palette.Red, 1, 1, 1),
+//	)
+//	pls = append(pls, c)
+//	p := plot.New()
+//	p.Title.Text = "Plotutil example"
+//	p.X.Label.Text = "X"
+//	p.Y.Label.Text = "Y"
+//	p.Add(plotter.NewGrid())
+//
+//	p.Add(pls...)
+//	if err := p.Save(10*vg.Inch, 6*vg.Inch, fmt.Sprintf("./temp/%d.png", tt)); err != nil {
+//		panic(err)
+//	}
+//
+//}
 
 func PrintS(image []float64, tt int) {
 	data := nd.NewVec(image...)

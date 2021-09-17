@@ -71,7 +71,8 @@ func TestSumTo(t *testing.T) {
 		keepDims bool
 		want     *Variable
 	}{
-		{NewMat([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 0, true, NewVec(4, 4, 4)},
+		{NewMat([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 0, false, NewVec(4, 4, 4)},
+		{NewMat([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 0, true, NewVec(4, 4, 4).ReShape(1, 3)},
 		{NewMat([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 1, true, NewMat([]float64{6, 6}, 2, 1)},
 		//{NewMat([]float64{1, 2, 3, 3, 2, 1}, 2, 3), nil, true, NewVec(12)},
 	}

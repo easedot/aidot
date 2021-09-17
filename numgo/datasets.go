@@ -4,7 +4,7 @@ import (
 	"math"
 	"math/rand"
 
-	nd "test_ai/numed"
+	nt "test_ai/tensor"
 	ut "test_ai/utils"
 )
 
@@ -13,7 +13,7 @@ type IDataset interface {
 }
 type DataSet struct {
 	Train       bool
-	Data        *nd.NumEd
+	Data        *nt.Tensor
 	Label       []float64
 	IDataset    IDataset
 	trans       *Compose
@@ -27,7 +27,7 @@ func (d *DataSet) Len() int {
 	return len(d.Label)
 }
 func (d *DataSet) Get(index int) ([]float64, float64) {
-	data := d.Data.RowData(index)
+	data := d.Data.Slices(0, index).Data()
 	////todo debug image show
 	//pv := nd.NewVec(data...)
 	//if pv.Sum(nil,true).Var()>1{
@@ -50,7 +50,8 @@ type spiral struct {
 
 func (s spiral) prePare(d *DataSet) {
 	data, label := GetSpiral(s.Train)
-	d.Data = nd.NewDense(ut.Flatten(data))
+	dr, dc, dd := ut.Flatten(data)
+	d.Data = nt.NewData(dd, dr, dc)
 	d.Label = label
 }
 
@@ -98,23 +99,20 @@ func (s *sinCurve) prePare(d *DataSet) {
 	numData := 1000
 	x := ut.Linspace(0, 2*math.Pi, numData)
 	noise := ut.RandUniformFloats(-0.05, 0.05, len(x))
-	xv := nd.NewVec(x...)
-	nv := nd.NewVec(noise...)
-	y := &nd.NumEd{}
+	xv := nt.NewVec(x...)
+	nv := nt.NewVec(noise...)
+	y := &nt.Tensor{}
 	if s.Train {
-		y = nd.Add(xv.Sin(), nv)
+		y = nt.Add(nt.Sin(xv), nv)
 	} else {
-		y = xv.Cos()
+		y = nt.Cos(xv)
 	}
 
-	t := y.Slice(0, 1, 0, len(x)-1)
-	sp := t.Shape()
-	d.Data = t.Reshape(sp.C, sp.R)
+	yd := y.Data()
+	d.Data = nt.NewVec(yd[:len(yd)-2]...)
 
-	//yt 取下一个点，来作为标签，判断模型输入x以后输出的y是否达到标签的预期，就是sin的下一个点
-	ys := y.Shape()
-	yt := y.Reshape(ys.C, ys.R).ColData(0)[1:]
-	d.Label = yt
+	//取下一个作为预测点
+	d.Label = yd[1 : len(yd)-1]
 }
 
 func SinCurve(train bool) *DataSet {

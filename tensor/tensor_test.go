@@ -12,8 +12,8 @@ func ExampleBroadcast() {
 	z.Print("z")
 	// Output:
 	//z
-	//[  1.000000   2.000000   3.000000 ]
-	//[  4.000000   5.000000   6.000000 ]
+	//[ 1.000000  2.000000  3.000000 ]
+	//[ 4.000000  5.000000  6.000000 ]
 }
 
 func ExampleNewZero() {
@@ -24,33 +24,35 @@ func ExampleNewZero() {
 	// Output:
 	//[3 3]
 	//[3 1]
-	//[  0.000000   0.000000   0.000000 ]
-	//[  0.000000   0.000000   0.000000 ]
-	//[  0.000000   0.000000   0.000000 ]
+	//[ 0.000000  0.000000  0.000000 ]
+	//[ 0.000000  0.000000  0.000000 ]
+	//[ 0.000000  0.000000  0.000000 ]
 }
 
 func ExampleNewArangeN() {
 	t := NewArangeN(3, 3)
 	t.Print("")
 	// Output:
-	//[  0.000000   1.000000   2.000000 ]
-	//[  3.000000   4.000000   5.000000 ]
-	//[  6.000000   7.000000   8.000000 ]
+	//[ 0.000000  1.000000  2.000000 ]
+	//[ 3.000000  4.000000  5.000000 ]
+	//[ 6.000000  7.000000  8.000000 ]
 }
 
 func TestNew(t *testing.T) {
 	//x3 := NewVec(1, 2, 3)
 	//x3.Print("x3")
-
-	//x := NewArangeN(2, 2)
-	//x.Print("x")
+	//x := []int{1, 2, 3, 4}
+	//ut.Reverse(x)
+	//y := sort.Reverse(sort.IntSlice(x))
+	//fmt.Printf("re:%v", y)
+	x := NewArangeN(2, 2)
+	x.Print("x")
 	//x1 := NewArange(5, 8, 1).View(2, 2)
 	//x1 := NewArangeN(2)
 	//x1.Print("x1")
 	//fmt.Printf("cdata:%v\n", x.data)
 	//fmt.Printf("shape:%v\n", x.shape)
 	//fmt.Printf("strid:%v\n", x.Strides)
-	//y := x.SumTo(1, false)
 	//y := x.MaxTo(0, false)
 	//y := x.ArgMax(1, true)
 	//y := x.MeanTo(1, true)
@@ -121,7 +123,7 @@ func ExampleAdd() {
 	z := Add(x, y)
 	z.Print("")
 	// Output:
-	// 5.000000   7.000000   9.000000
+	// 5.000000  7.000000  9.000000
 }
 func TestSub(t *testing.T) {
 	var tests = []struct {
@@ -244,7 +246,7 @@ func TestMax(t *testing.T) {
 		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 1, true, NewData([]float64{3, 3}, 2, 1)},
 	}
 	for _, test := range tests {
-		got := test.x.MaxTo(test.axis, test.keepDims)
+		got := Max(test.x, test.keepDims, test.axis)
 		if !DeepEqual(got, test.want) {
 			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
 		}
@@ -280,7 +282,7 @@ func TestMin(t *testing.T) {
 		//{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), nil, true, NewVec(1)},
 	}
 	for _, test := range tests {
-		got := test.x.MinTo(test.axis, test.keepDims)
+		got := test.x.Min(test.keepDims, test.axis)
 		if !DeepEqual(got, test.want) {
 			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
 		}
@@ -289,18 +291,22 @@ func TestMin(t *testing.T) {
 func TestSum(t *testing.T) {
 	var tests = []struct {
 		x        *Tensor
-		axis     int
+		axis     []int
 		keepDims bool
 		want     *Tensor
 	}{
-		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 0, false, NewVec(4, 4, 4)},
-		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 1, false, NewData([]float64{6, 6}, 2)},
-		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 0, true, NewVec(4, 4, 4).View(1, 3)},
-		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 1, true, NewData([]float64{6, 6}, 2, 1)},
-		//{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), nil, true, NewVec(12)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 6), []int{}, false, NewVar(12)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 6, 1), []int{}, false, NewVar(12)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 6, 1), []int{}, true, NewFills(12, 1, 1)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), []int{0}, false, NewVec(4, 4, 4)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), []int{1}, false, NewData([]float64{6, 6}, 2)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), []int{0}, true, NewVec(4, 4, 4).View(1, 3)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), []int{1}, true, NewData([]float64{6, 6}, 2, 1)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), []int{0, 1}, true, NewData([]float64{12}, 1, 1)},
+		{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), []int{0, 1}, false, NewVar(12)},
 	}
 	for _, test := range tests {
-		got := test.x.SumTo(test.axis, test.keepDims)
+		got := test.x.Sum(test.keepDims, test.axis...)
 		if !DeepEqual(got, test.want) {
 			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
 		}
@@ -319,7 +325,7 @@ func TestMean(t *testing.T) {
 		//{NewData([]float64{1, 2, 3, 3, 2, 1}, 2, 3), 1, true, NewVec(2, 2).View(2, -1)},
 	}
 	for _, test := range tests {
-		got := test.x.MeanTo(test.dim, test.keepDim)
+		got := test.x.Mean(test.keepDim, test.dim)
 		if !DeepEqual(got, test.want) {
 			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("w"))
 		}

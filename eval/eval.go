@@ -61,7 +61,7 @@ func (b binary) Eval(env V) *ng.Variable {
 func (c call) Eval(env V) *ng.Variable {
 	switch c.fn {
 	case "pow":
-		return ng.Pow(c.args[0].Eval(env), int(c.args[1].Eval(env).Var()))
+		return ng.Pow(c.args[0].Eval(env), int(c.args[1].Eval(env).Data.Var()))
 	case "sin":
 		return ng.Sin(c.args[0].Eval(env))
 	case "cos":

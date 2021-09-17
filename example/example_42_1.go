@@ -10,39 +10,39 @@ import (
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 	ep "test_ai/eval"
-	nd "test_ai/numed"
 	ng "test_ai/numgo"
+	nt "test_ai/tensor"
 )
 
 func main() {
-	a,_:=ep.Parse("sin(2*3.1415926*x)+x1")
-
-	x:=ng.NewRand(100,1)
-	x.Name="x"
-	x1:=ng.NewRand(100,1)
-	x1.Name="x1"
+	a, _ := ep.Parse("sin(2*3.1415926*x)+x1")
+	x := ng.AsVar(nt.NewRand(100, 1))
+	x.Name = "x"
+	x1 := ng.AsVar(nt.NewRand(100, 1))
+	x1.Name = "x1"
 	//y:=ng.Add(ng.Add(ng.NewVar(5),ng.Mul(ng.NewVar(2),x)),x1)
-	y:=a.Eval(ep.V{"x":x,"x1":x1})
-	y.Name="y"
+	ev := a.Eval(ep.V{"x": x, "x1": x1})
+	y := ng.AsVar(ev.Data)
+	y.Name = "y"
 	//ut.PrintDense("x",g.Data)
 	//ut.PrintDense("x",x.Data)
 	//ut.PrintDense("y",y.Data)
-	W:=ng.NewVar(0)
-	W.Name="w"
-	b:=ng.NewVar(0)
-	b.Name="b"
-	predict:=func(x *ng.Variable)*ng.Variable{
-		t:=ng.Add(ng.Matmul(x,W),b)
+	W := ng.AsVar(nt.NewZeros(1, 1))
+	W.Name = "w"
+	b := ng.AsVar(nt.NewZeros(1))
+	b.Name = "b"
+	predict := func(x *ng.Variable) *ng.Variable {
+		t := ng.Add(ng.Matmul(x, W), b)
 		return t
 	}
-	lr:=ng.NewVar(0.1)
-	iters:=100
-	for i:=0;i<iters;i++{
-		yPred :=predict(x)
-		loss:=ng.MeanSquaredError(y, yPred)
-		if i==0{
-			yPred.Plot(true,"./temp/pred.png")
-			loss.Plot(true,"./temp/loss.png")
+	lr := ng.NewVar(0.1)
+	iters := 100
+	for i := 0; i < iters; i++ {
+		yPred := predict(x)
+		loss := ng.MeanSquaredError(y, yPred)
+		if i == 0 {
+			yPred.Plot(true, "./temp/pred.png")
+			loss.Plot(true, "./temp/loss.png")
 		}
 
 		W.ClearGrade()
@@ -51,11 +51,11 @@ func main() {
 		loss.Backward(false)
 
 		//更新参数不使用连接图，直接修改data
-		W.Data=nd.Sub(W.Data,nd.Mul(W.Grad.Data,lr.Data))
-		b.Data=nd.Sub(b.Data,nd.Mul(b.Grad.Data,lr.Data))
+		W.Data = nt.Sub(W.Data, nt.Mul(W.Grad.Data, lr.Data))
+		b.Data = nt.Sub(b.Data, nt.Mul(b.Grad.Data, lr.Data))
 
-		fmt.Println(i,loss.Sprint("loss"),W.Sprint("w"),b.Sprint("b"))
-		if loss.At(0,0)<0.1{
+		fmt.Println(i, loss.Sprint("loss"), W.Sprint("w"), b.Sprint("b"))
+		if loss.Data.Var() < 0.1 {
 			break
 		}
 	}
@@ -66,29 +66,29 @@ func main() {
 	p.Y.Label.Text = "Y"
 	p.Add(plotter.NewGrid())
 
-	predPts:=make(plotter.XYs,x.Shape().R)
-	pts:=make(plotter.XYs,x.Shape().R)
-	for i:=0;i<x.Shape().R;i++{
-		px := x.At(i, 0)
-		pts[i].X,predPts[i].X= px,px
-		pts[i].Y=y.At(i,0)
-		predPts[i].Y=predict(ng.NewVar(px)).At(0,0)
+	preY := predict(x)
+	predPts := make(plotter.XYs, x.Data.Shape()[0])
+	pts := make(plotter.XYs, x.Data.Shape()[0])
+	for i := 0; i < x.Data.Shape()[0]; i++ {
+		px := x.Data.Get(i, 0)
+		pts[i].X, predPts[i].X = px, px
+		pts[i].Y = y.Data.Get(i, 0)
+		predPts[i].Y = preY.Data.Get(i, 0)
 	}
-	ptsList:=[]plotter.XYs{pts,predPts}
+	ptsList := []plotter.XYs{pts, predPts}
 
 	// Make a scatter plotter and set its style.
 	var pls []plot.Plotter
-	for _,sd:=range ptsList{
+	for _, sd := range ptsList {
 		s, err := plotter.NewScatter(sd)
 		if err != nil {
 			panic(err)
 		}
 		s.GlyphStyle.Color = color.RGBA{R: uint8(rand.Intn(255)), B: uint8(rand.Intn(255)), A: uint8(rand.Intn(255))}
-		pls=append(pls,s)
+		pls = append(pls, s)
 	}
 	p.Add(pls...)
 	if err := p.Save(10*vg.Inch, 6*vg.Inch, "./temp/points.png"); err != nil {
 		panic(err)
 	}
 }
-

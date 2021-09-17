@@ -34,8 +34,8 @@ func main() {
 			loss.Backward(false)
 			model.Grad2Param()
 			l := float64(len(dt))
-			sumLoss += loss.Var() * l
-			sumAcc += acc.Var() * l
+			sumLoss += loss.Data.Var() * l
+			sumAcc += acc.Data.Var() * l
 			fmt.Printf("train loss %.2f ,accuracy:%.2f\n", sumLoss/trainLen, sumAcc/trainLen)
 
 		}

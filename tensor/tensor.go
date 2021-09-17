@@ -57,6 +57,18 @@ func NewOnes(shape ...int) *Tensor {
 	}
 	return NewData(d, shape...)
 }
+func NewFills(fill float64, shape ...int) *Tensor {
+	d := make([]float64, numElements(shape))
+	for di := range d {
+		d[di] = fill
+	}
+	return NewData(d, shape...)
+}
+
+func LikeFills(fill float64, t *Tensor) *Tensor {
+	return NewFills(fill, t.shape...)
+}
+
 func LikeOnes(t *Tensor) *Tensor {
 	return NewOnes(t.shape...)
 }
@@ -141,15 +153,20 @@ func (t *Tensor) Sprint(name string) string {
 
 	return s
 }
-func (t *Tensor) Save(file string) {
-	ut.WriteGob(file, t)
+func (t *Tensor) Save(file string) error {
+	return ut.WriteGob(file, t)
 }
-func (t *Tensor) Load(file string) {
-	ut.ReadGob(file, &t)
+func (t *Tensor) Load(file string) error {
+	return ut.ReadGob(file, &t)
 }
 
 func (t *Tensor) Data() []float64 {
-	return t.data
+	return t.data[t.offset:]
+}
+
+func (t *Tensor) Var() float64 {
+	pos := ut.FillDims(0, t.ndim)
+	return t.Get(pos...)
 }
 
 func (t *Tensor) Get(pos ...int) float64 {
@@ -213,30 +230,70 @@ func (t *Tensor) View(shape ...int) *Tensor {
 	return nt
 }
 
-func (t *Tensor) SumTo(dim int, keepDim bool) *Tensor {
-	var nt *Tensor
-	t.ApplyDim(dim, keepDim, func(idx int, dimT *Tensor) {
-		if nt == nil {
-			nt = dimT
-		} else {
-			nt = Add(nt, dimT)
+func BroadcastTo(t *Tensor, shape ...int) *Tensor {
+	////todo 重构成不复制数据，只是改变shape
+	nt := NewZeros(shape...)
+	nt = Add(nt, t)
+	//nt := NewData(t.Data(), shape...)
+	return nt
+}
+
+//todo 这里要保证shape小于t的shape，因为都是基于t来做处理的
+func SumTo(t *Tensor, shape []int) *Tensor {
+	ndim := len(shape)
+	lead := t.ndim - ndim
+	leadAxis := ut.ArangeInt(0, lead, 1)
+	axis := leadAxis
+	for idx, dm := range shape {
+		if dm == 1 {
+			axis = append(axis, idx+lead)
 		}
-	})
-	return nt
+	}
+	// fmt.Printf("dubug sumto axis %v", axis)
+	y := t.Sum(true, axis...)
+	if lead > 0 {
+		y = Squeeze(y, leadAxis...)
+	}
+	return y
 }
 
-func (t *Tensor) Mean() *Tensor {
-	nt := t.Sum()
-	nt = nt / float64(t.Len())
-	return NewVar(nt)
+func SumToOld(t *Tensor, shape []int) *Tensor {
+	if !ut.IsEqInt(t.shape, shape) {
+		xpad, ypad, xb, yb := getBroadcastable(t.shape, shape)
+		if len(xb) > 0 {
+			t = t.Sum(true, xb...)
+		}
+		if len(yb) > 0 {
+			t = t.Sum(true, yb...)
+		}
+		if xpad > 0 {
+			t = Squeeze(t, ut.ArangeInt(0, xpad, 1)...)
+		}
+		if ypad > 0 {
+			t = Squeeze(t, ut.ArangeInt(0, ypad, 1)...)
+		}
+		return t
+	} else {
+		return t
+	}
 }
 
-func (t *Tensor) MeanTo(dim int, keepDim bool) *Tensor {
-	nt := t.SumTo(dim, keepDim)
-	nt = Div(nt, NewVar(float64(t.shape[dim])))
-
-	return nt
-}
+//func (t *Tensor) sumTo(keepDim bool, dims ...int) *Tensor {
+//	var nt *Tensor
+//	if len(dims) == 0 {
+//		dims = ut.ArangeInt(0, t.Dims(), 1)
+//	}
+//	for _, dim := range dims {
+//		t.ApplyDim(dim, keepDim, func(idx int, dimT *Tensor) {
+//			if nt == nil {
+//				nt = dimT
+//			} else {
+//				nt = Add(nt, dimT)
+//			}
+//		})
+//	}
+//	return nt
+//}
 
 func (t *Tensor) ArgMax(dim int, keepDim bool) *Tensor {
 	var nt *Tensor
@@ -250,30 +307,6 @@ func (t *Tensor) ArgMax(dim int, keepDim bool) *Tensor {
 		}
 	})
 	return idt
-}
-
-func (t *Tensor) MaxTo(dim int, keepDim bool) *Tensor {
-
-	var nt *Tensor
-	t.ApplyDim(dim, keepDim, func(idx int, dimT *Tensor) {
-		if nt == nil {
-			nt = dimT
-		} else {
-			nt = Max(nt, dimT)
-		}
-	})
-	return nt
-}
-func (t *Tensor) MinTo(dim int, keepDim bool) *Tensor {
-	var nt *Tensor
-	t.ApplyDim(dim, keepDim, func(idx int, dimT *Tensor) {
-		if nt == nil {
-			nt = dimT
-		} else {
-			nt = Min(nt, dimT)
-		}
-	})
-	return nt
 }
 
 func (t *Tensor) Index(idx, dim int) *Tensor {
@@ -457,7 +490,7 @@ func (t *Tensor) Transpose(dim0, dim1 int) *Tensor {
 
 func (t *Tensor) T() *Tensor {
 	if t.ndim != 2 {
-		panic(fmt.Errorf("Tensor must 2 "))
+		panic(fmt.Errorf("Tensor ndim must =2 "))
 	}
 	return t.Transpose(0, 1)
 }
@@ -478,11 +511,21 @@ func (t *Tensor) Permute(newIndex ...int) *Tensor {
 	return nt
 }
 
-func Squeeze(t *Tensor) *Tensor {
+func Squeeze(t *Tensor, ds ...int) *Tensor {
 	var ns []int
-	for i := 0; i < t.ndim; i++ {
-		if t.shape[i] != 1 {
-			ns = append(ns, t.shape[i])
+	if len(ds) == 0 {
+		for i := 0; i < t.ndim; i++ {
+			if t.shape[i] != 1 {
+				ns = append(ns, t.shape[i])
+			}
+		}
+	} else {
+		for i := 0; i < t.ndim; i++ {
+			for _, d := range ds {
+				if t.shape[i] != d {
+					ns = append(ns, t.shape[i])
+				}
+			}
 		}
 	}
 	nt := &Tensor{
@@ -522,24 +565,24 @@ func UnSqueeze(t *Tensor, dim int) *Tensor {
 //}
 
 func Equal(x, y *Tensor) bool {
-	if !testEqInt(x.shape, y.shape) {
+	if !ut.IsEqInt(x.shape, y.shape) {
 		return false
 	}
-	if !testEqInt(x.Strides, y.Strides) {
+	if !ut.IsEqInt(x.Strides, y.Strides) {
 		return false
 	}
 	return true
 }
 func DeepEqual(xi, yi *Tensor, e ...float64) bool {
 	x, y := xi.Contingous(), yi.Contingous()
-	if !testEqInt(x.shape, y.shape) {
+	if !ut.IsEqInt(x.shape, y.shape) {
 		return false
 	}
-	if !testEqInt(x.Strides, y.Strides) {
+	if !ut.IsEqInt(x.Strides, y.Strides) {
 		return false
 	}
 	//must continue
-	if !testEq(x.data[x.offset:x.offset+x.Len()], y.data[y.offset:y.offset+y.Len()], e...) {
+	if !ut.IsEq(x.data[x.offset:x.offset+x.Len()], y.data[y.offset:y.offset+y.Len()], e...) {
 		return false
 	}
 	return true
@@ -606,17 +649,17 @@ func Mul(t1, t2 *Tensor) *Tensor {
 func Dot(t1, t2 *Tensor) *Tensor {
 	dim := 0
 	if t1.ndim == 1 && t2.ndim == 1 { //for 1D vector
-		return Sum(Mul(t1, t2))
+		return Sum(Mul(t1, t2), false)
 	}
-	if t1.shape[0] != t2.shape[1] {
-		panic(fmt.Errorf("dot a rows must equal b cols"))
+	if t1.shape[1] != t2.shape[0] {
+		panic(fmt.Errorf("dot a rows must equal b cols t1:%v t2:%v", t1, t2))
 	}
-	t1r, t2c := t1.shape[dim], t2.shape[dim+1]
+	t1r, t2c := t1.shape[0], t2.shape[1]
 	nt := NewZeros(t1r, t2c)
 	for i := 0; i < t1r; i++ {
 		for j := 0; j < t2c; j++ {
-			sum := Mul(t1.Index(i, dim), t2.Index(j, dim+1)).Sum()
-			nt.Set(sum, i, j)
+			sum := Mul(t1.Index(i, dim), t2.Index(j, dim+1)).Sum(false)
+			nt.Set(sum.Get(0), i, j)
 		}
 	}
 	return nt
@@ -631,7 +674,7 @@ func Div(t1, t2 *Tensor) *Tensor {
 }
 
 //Max func
-func Max(t1, t2 *Tensor) *Tensor {
+func Maximum(t1, t2 *Tensor) *Tensor {
 	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		if v < ov {
 			return ov
@@ -652,7 +695,7 @@ func Max(t1, t2 *Tensor) *Tensor {
 //}
 
 //Min func
-func Min(t1, t2 *Tensor) *Tensor {
+func Minimum(t1, t2 *Tensor) *Tensor {
 	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		if v > ov {
 			return ov
@@ -673,17 +716,130 @@ func Min(t1, t2 *Tensor) *Tensor {
 //}
 
 //---
-func Sum(t *Tensor) *Tensor {
-	return NewVar(t.Sum())
+func Sum(t *Tensor, keepDim bool, axis ...int) *Tensor {
+	//nt := t.DeepClone()
+	return t.Sum(keepDim, axis...)
 }
 
-func (t *Tensor) Sum() float64 {
-	sum := 0.0
-	t.Apply(func(v float64) float64 {
-		sum += v
-		return v
-	})
-	return sum
+func (t *Tensor) Sum(keepDim bool, axis ...int) *Tensor {
+	var nt *Tensor
+	if t.ndim == 1 || len(axis) == 0 { //没有选轴就是所有轴
+		sum := ut.Sum(t.Data())
+		if keepDim {
+			ns := ut.FillDims(1, t.ndim)
+			return NewFills(sum, ns...)
+		} else {
+			return NewVar(sum)
+		}
+	}
+	if len(axis) == 1 {
+		t.ApplyDim(axis[0], keepDim, func(idx int, dimT *Tensor) {
+			if nt == nil {
+				nt = dimT
+			} else {
+				nt = Add(nt, dimT)
+			}
+		})
+		return nt
+	} else {
+		at := t
+		for _, dim := range axis {
+			at = at.Sum(keepDim, dim)
+		}
+		return at
+		//panic("not support axis array")
+	}
+
+}
+func Mean(t *Tensor, keepDim bool, axis ...int) *Tensor {
+	nt := t.DeepClone()
+	return nt.Mean(keepDim, axis...)
+}
+
+func (t *Tensor) Mean(keepDim bool, axis ...int) *Tensor {
+	var nt *Tensor
+	if t.ndim == 1 || len(axis) == 0 { //没有选轴就是所有轴
+		mean := ut.Sum(t.Data()) / float64(t.Len())
+		if keepDim {
+			ns := ut.FillDims(1, t.ndim)
+			return NewFills(mean, ns...)
+		} else {
+			return NewVar(mean)
+		}
+	}
+	if len(axis) == 1 {
+		dim := axis[0]
+		t.ApplyDim(dim, keepDim, func(idx int, dimT *Tensor) {
+			if nt == nil {
+				nt = dimT
+			} else {
+				nt = Add(nt, dimT)
+			}
+		})
+		nt = Div(nt, NewVar(float64(t.shape[dim])))
+		return nt
+	} else {
+		panic("not support axis array")
+	}
+}
+func Max(t *Tensor, keepDim bool, axis ...int) *Tensor {
+	return t.Max(keepDim, axis...)
+}
+
+func (t *Tensor) Max(keepDim bool, axis ...int) *Tensor {
+	var nt *Tensor
+	if t.ndim == 1 || len(axis) == 0 { //没有选轴就是所有轴
+		max := ut.MaxFloat64Slice(t.Data())
+		if keepDim {
+			ns := ut.FillDims(1, t.ndim)
+			return NewFills(max, ns...)
+		} else {
+			return NewVar(max)
+		}
+	}
+	if len(axis) == 1 {
+		dim := axis[0]
+		t.ApplyDim(dim, keepDim, func(idx int, dimT *Tensor) {
+			if nt == nil {
+				nt = dimT
+			} else {
+				nt = Maximum(nt, dimT)
+			}
+		})
+		return nt
+	} else {
+		panic("not support axis array")
+	}
+}
+
+func Min(t *Tensor, keepDim bool, axis ...int) *Tensor {
+	return t.Min(keepDim, axis...)
+}
+
+func (t *Tensor) Min(keepDim bool, axis ...int) *Tensor {
+	var nt *Tensor
+	if t.ndim == 1 || len(axis) == 0 { //没有选轴就是所有轴
+		max := ut.MinFloat64Slice(t.Data())
+		if keepDim {
+			ns := ut.FillDims(1, t.ndim)
+			return NewFills(max, ns...)
+		} else {
+			return NewVar(max)
+		}
+	}
+	if len(axis) == 1 {
+		dim := axis[0]
+		t.ApplyDim(dim, keepDim, func(idx int, dimT *Tensor) {
+			if nt == nil {
+				nt = dimT
+			} else {
+				nt = Minimum(nt, dimT)
+			}
+		})
+		return nt
+	} else {
+		panic("not support axis array")
+	}
 }
 
 func Sin(t *Tensor) *Tensor {
@@ -798,34 +954,30 @@ func (t *Tensor) Clip(min, max float64) {
 		return v
 	})
 }
-func Maximum(t *Tensor, max float64) *Tensor {
-	nt := t.DeepClone()
-	nt.Maximum(max)
-	return nt
+
+func MeshGrid(x, y *Tensor) (*Tensor, *Tensor) {
+	col := x.Shape()[1]
+	row := y.Shape()[1]
+	y = y.T()
+	xm := BroadcastTo(x, row, col)
+	ym := BroadcastTo(y, row, col)
+	return xm, ym
 }
 
-func (t *Tensor) Maximum(max float64) {
-	t.Apply(func(v float64) float64 {
-		if v > max {
-			return max
+//x axis and y axis cross pts grid
+//x is 1,c and y is 1,c
+func Cross(x, y *Tensor) *Tensor {
+	xr, xc := x.Shape()[0], x.Shape()[1]
+	t := NewZeros(xr*xc, 2)
+	for i := 0; i < xr; i++ {
+		for j := 0; j < xc; j++ {
+			t.Set(x.Get(i, j), i*xc+j, 0)
+			t.Set(y.Get(i, j), i*xc+j, 1)
 		}
-		return v
-	})
-}
-func Minimum(t *Tensor, min float64) *Tensor {
-	nt := t.DeepClone()
-	nt.Minimum(min)
-	return nt
+	}
+	return t
 }
 
-func (t *Tensor) Minimum(min float64) {
-	t.Apply(func(v float64) float64 {
-		if v > min {
-			return min
-		}
-		return v
-	})
-}
 func Apply(t *Tensor, fn func(v float64) float64) *Tensor {
 	nt := t.DeepClone()
 	nt.Apply(fn)
@@ -851,23 +1003,30 @@ func (t *Tensor) ApplyPos(fn func(pos []int, v float64) float64) {
 }
 
 // ApplyPair for mask func etc...
-func ApplyPair(dst, src *Tensor, fn func(dst, src float64) float64) {
-	if !testEqInt(src.shape, dst.shape) {
+func ApplyPair(dst, src *Tensor, fn func(dst, src float64) float64) *Tensor {
+	nt := dst.DeepClone()
+	nt.ApplyPair(src, fn)
+	return nt
+}
+
+func (t *Tensor) ApplyPair(src *Tensor, fn func(dst, src float64) float64) {
+	if !ut.IsEqInt(src.shape, t.shape) {
 		panic(fmt.Errorf("src and dst muse save dim and shape"))
 	}
 	size := numElements(src.shape)
 	for i := 0; i < size; i++ {
 		pos := index2pos(i, src.shape, src.Strides)
-		v := dst.Get(pos...)
+		v := t.Get(pos...)
 		ov := src.Get(pos...)
-		dst.Set(fn(v, ov), pos...)
+		t.Set(fn(v, ov), pos...)
 	}
 }
 
 func ApplyBroadcast(t, other *Tensor, fn func(idx int, v, ov float64) float64) *Tensor {
 	if !isBraadcastable(t.shape, other.shape) {
-		panic(fmt.Errorf("calc tensor shape must isBraadcastable"))
+		panic(fmt.Errorf("calc tensor shape must isBraadcastable x0:%v x1:%v", t, other))
 	}
+	//todo 这里有隐含的顺序依赖，需要重构
 	if t.ndim > other.ndim {
 		other = padTensor(t.ndim-other.ndim, other)
 	}
@@ -877,90 +1036,30 @@ func ApplyBroadcast(t, other *Tensor, fn func(idx int, v, ov float64) float64) *
 	nt := newUnionTensor(t, other)
 	for i := 0; i < len(nt.data); i++ {
 		pos := index2pos(i, nt.shape, nt.Strides)
-		v := t.Get(pos...)
-		ov := other.Get(pos...)
-		nt.Set(fn(i, v, ov), pos...)
+		nt.Set(fn(i, t.Get(pos...), other.Get(pos...)), pos...)
 	}
 	return nt
 }
 
-//func (t *Tensor) ApplyBroadcast(other *Tensor, fn func(idx int, v, ov float64) float64) {
-//	if !isBraadcastable(t.shape, other.shape) {
-//		panic(fmt.Errorf("calc tensor shape must isBraadcastable"))
-//	}
-//	//todo pading shape
-//	padShape(t, other)
-//	size := numElements(t.shape)
-//	ySize := numElements(other.shape)
-//	if ySize > size {
-//		calcPaire(other, t, fn)
-//		//todo 这里目前为了效率使用的浅拷贝，复用了底层的data
-//		t.Copy(other)
-//	} else {
-//		calcPaire(t, other, fn)
-//	}
-//
-//}
-//func calcPaire(x, y *Tensor, fn func(idx int, v, ov float64) float64) {
-//	size := numElements(x.shape)
-//	for i := 0; i < size; i++ {
-//		//pos := index2pos(i, x.shape, y.Strides)
-//		pos := index2pos(i, x.shape, x.Strides)
-//		//fmt.Printf("pos:%v", pos)
-//		v := x.Get(pos...)
-//		ov := y.Get(pos...)
-//		x.Set(fn(i, v, ov), pos...)
-//	}
-//}
 func (t *Tensor) ApplyDim(dim int, keepDim bool, fn func(idx int, dimT *Tensor)) {
+	if dim >= len(t.shape) {
+		panic(fmt.Errorf("applydim dim:%d must < len(shape):%d", dim, len(t.shape)))
+	}
 	dimSize := t.shape[dim]
 	if keepDim {
 		for i := 0; i < dimSize; i++ {
-			fn(i, t.Slice(i, i+1, dim).Contingous())
+			dimV := t.Slice(i, i+1, dim).Contingous()
+			fn(i, dimV)
 		}
 	} else {
 		for i := 0; i < dimSize; i++ {
-			fn(i, t.Index(i, dim).Contingous())
+			dimV := t.Index(i, dim).Contingous()
+			fn(i, dimV)
 		}
 	}
 }
 
 //---tools
-
-func newUnionTensor(x, y *Tensor) *Tensor {
-	ndim := len(x.shape)
-	nshape := make([]int, ndim)
-	for i := 0; i < ndim; i++ {
-		nshape[i] = x.shape[i]
-		if y.shape[i] > x.shape[i] {
-			nshape[i] = y.shape[i]
-		}
-	}
-	nt := &Tensor{
-		data:    make([]float64, numElements(nshape)),
-		ndim:    ndim,
-		shape:   nshape,
-		Strides: genStrides(nshape),
-	}
-	return nt
-}
-
-//func padShape(x, y *Tensor) {
-//	pad := len(x.shape) - len(y.shape)
-//	if pad > 0 {
-//		y = padTensor(pad, y)
-//	}
-//	if pad < 0 {
-//		x = padTensor(-1*pad, x)
-//	}
-//}
-
-func padTensor(pad int, t *Tensor) *Tensor {
-	for i := 0; i < pad; i++ {
-		t = UnSqueeze(t, 0)
-	}
-	return t
-}
 
 //argMax todo for cuda
 func argMax(t, ot, idt *Tensor, idm int) *Tensor {
@@ -973,38 +1072,6 @@ func argMax(t, ot, idt *Tensor, idm int) *Tensor {
 		return v
 	})
 	return nt
-}
-
-func testEq(a, b []float64, e ...float64) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	eps := 1e-4
-	if len(e) > 0 {
-		eps = e[0]
-	}
-	for i := range a {
-		if math.Abs(a[i]-b[i]) > eps {
-			return false
-		}
-	}
-	return true
-}
-func testEqInt(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func remove(slice []int, i int) []int {
-	copy(slice[i:], slice[i+1:])
-	return slice[:len(slice)-1]
 }
 
 func genStrides(shape []int) []int {
@@ -1066,35 +1133,117 @@ func index2pos(index int, shape, strides []int) []int {
 	}
 	return pos
 }
+func getBroadcastable(x, y []int) (xpad, ypad int, xb, yb []int) {
+	minDim := len(x)
+	if len(x) > len(y) {
+		ypad = len(x) - len(y)
+		minDim = len(y)
+	}
+	if len(x) < len(y) {
+		xpad = len(y) - len(x)
+	}
+	//must from big to small
+	for i := minDim - 1; i >= 0; i-- {
+		xdv, ydv := x[i], y[i]
+		if xdv != ydv && xdv != 1 && ydv != 1 {
+			return
+		} else {
+			if xdv == 1 && ydv != 1 {
+				xb = append(xb, i)
+			}
+			if ydv == 1 && xdv != 1 {
+				yb = append(yb, i)
+			}
+		}
+	}
+	return
+}
+
+//func isBraadcastableOld(x, y []int) bool {
+//	xndim := len(x)
+//	yndim := len(y)
+//	if xndim < 1 && yndim < 1 {
+//		panic(fmt.Errorf("broadcast ndim must>=1"))
+//	}
+//	//todo 在头部加入缺失的维度,可能有优化空间
+//	if xndim > yndim {
+//		paddingDim := xndim - yndim
+//		y = append(make([]int, paddingDim, paddingDim), y...)
+//		for i := 0; i < paddingDim; i++ {
+//			y[i] = 1
+//		}
+//	}
+//	if xndim < yndim {
+//		paddingDim := xndim - yndim
+//		x = append(x, make([]int, paddingDim, paddingDim)...)
+//		for i := 0; i < paddingDim; i++ {
+//			x[i] = 1
+//		}
+//	}
+//	//因为缺失的维度是会自动向前补充的，所以一定是可以广播的，所以这里只检查最短的匹配就可以
+//	for i := len(x) - 1; i >= 0; i-- {
+//		xdv := x[i]
+//		ydv := y[i]
+//		if xdv != ydv && !(xdv == 1 || ydv == 1) {
+//			return false
+//		}
+//	}
+//	return true
+//}
+
 func isBraadcastable(x, y []int) bool {
+	//因为缺失的维度是会自动向前补充的，所以一定是可以广播的，所以这里只检查最短的匹配就可以
 	xndim := len(x)
 	yndim := len(y)
 	if xndim < 1 && yndim < 1 {
-		panic(fmt.Errorf("broadcast ndim must>=1"))
+		//panic(fmt.Errorf("broadcast ndim must>=1 x:%v y:%v", x, y))
+		return false
 	}
-	if xndim > yndim {
-		paddingDim := xndim - yndim
-		y = append(make([]int, paddingDim, paddingDim), y...)
-		for i := 0; i < paddingDim; i++ {
-			y[i] = 1
-		}
-	}
-	if xndim < yndim {
-		paddingDim := xndim - yndim
-		x = append(x, make([]int, paddingDim, paddingDim)...)
-		for i := 0; i < paddingDim; i++ {
-			x[i] = 1
-		}
-	}
+	x, y = ut.PadDims(x, y)
+	//must from big to small
 	for i := len(x) - 1; i >= 0; i-- {
-		xdv := x[i]
-		ydv := y[i]
-		if xdv != ydv && !(xdv == 1 || ydv == 1) {
+		xdv, ydv := x[i], y[i]
+		if xdv != ydv && xdv != 1 && ydv != 1 {
 			return false
 		}
 	}
 	return true
 }
+func newUnionTensor(x, y *Tensor) *Tensor {
+	ndim := len(x.shape)
+	nshape := make([]int, ndim)
+	for i := 0; i < ndim; i++ {
+		nshape[i] = x.shape[i]
+		if y.shape[i] > x.shape[i] {
+			nshape[i] = y.shape[i]
+		}
+	}
+	nt := &Tensor{
+		data:    make([]float64, numElements(nshape)),
+		ndim:    ndim,
+		shape:   nshape,
+		Strides: genStrides(nshape),
+	}
+	return nt
+}
+
+//func padShape(x, y *Tensor) {
+//	pad := len(x.shape) - len(y.shape)
+//	if pad > 0 {
+//		y = padTensor(pad, y)
+//	}
+//	if pad < 0 {
+//		x = padTensor(-1*pad, x)
+//	}
+//}
+
+func padTensor(pad int, t *Tensor) *Tensor {
+	for i := 0; i < pad; i++ {
+		t = UnSqueeze(t, 0)
+	}
+	return t
+}
+
 func autoFillNegShape(oldShape, newShape []int) []int {
 	oSize := numElements(oldShape)
 	nSize, negPos := 1, -1
@@ -1137,7 +1286,7 @@ func sprintTensor(xi *Tensor) string {
 			}
 		}
 
-		s += fmt.Sprintf(" %9.6f ", x.data[(x.offset+i)])
+		s += fmt.Sprintf("%9.6f ", x.data[(x.offset+i)])
 
 		for j := x.ndim - 2; j >= 0; j-- {
 			ds := i % x.Strides[j]
@@ -1183,3 +1332,32 @@ func RandE(shape ...int) []float64 {
 	}
 	return s
 }
+
+//func (t *Tensor) ApplyBroadcast(other *Tensor, fn func(idx int, v, ov float64) float64) {
+//	if !isBraadcastable(t.shape, other.shape) {
+//		panic(fmt.Errorf("calc tensor shape must isBraadcastable"))
+//	}
+//	//todo pading shape
+//	padShape(t, other)
+//	size := numElements(t.shape)
+//	ySize := numElements(other.shape)
+//	if ySize > size {
+//		calcPaire(other, t, fn)
+//		//todo 这里目前为了效率使用的浅拷贝，复用了底层的data
+//		t.Copy(other)
+//	} else {
+//		calcPaire(t, other, fn)
+//	}
+//
+//}
+//func calcPaire(x, y *Tensor, fn func(idx int, v, ov float64) float64) {
+//	size := numElements(x.shape)
+//	for i := 0; i < size; i++ {
+//		//pos := index2pos(i, x.shape, y.Strides)
+//		pos := index2pos(i, x.shape, x.Strides)
+//		//fmt.Printf("pos:%v", pos)
+//		v := x.Get(pos...)
+//		ov := y.Get(pos...)
+//		x.Set(fn(i, v, ov), pos...)
+//	}
+//}

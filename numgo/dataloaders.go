@@ -4,6 +4,7 @@ import (
 	"math/rand"
 
 	nd "test_ai/numed"
+	nt "test_ai/tensor"
 	ut "test_ai/utils"
 )
 
@@ -41,7 +42,7 @@ func (d *DataLoader) HasNext() bool {
 		return false
 	}
 }
-func (d *DataLoader) Next() (x *nd.NumEd, t []float64) {
+func (d *DataLoader) Next() (x *nt.Tensor, t []float64) {
 	batchIndex := d.index[d.iteration*d.batchSize : (d.iteration+1)*d.batchSize]
 	xf, tf := make([][]float64, d.batchSize), make([]float64, d.batchSize)
 	for i, r := range batchIndex {
@@ -50,7 +51,8 @@ func (d *DataLoader) Next() (x *nd.NumEd, t []float64) {
 		tf[i] = tt
 	}
 	d.iteration += 1
-	return nd.NewDense(ut.Flatten(xf)), tf
+	dr, dc, dd := ut.Flatten(xf)
+	return nt.NewData(dd, dr, dc), tf
 }
 func (d *DataLoader) ToGpu() {
 	d.gpu = true

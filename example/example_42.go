@@ -9,38 +9,41 @@ import (
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
-	nd "test_ai/numed"
 	ng "test_ai/numgo"
+	nt "test_ai/tensor"
 )
 
 func main() {
 
-	x := ng.NewRand(100, 1)
+	x := ng.AsVar(nt.NewRand(100, 1))
 	x.Name = "x"
-	x1 := ng.NewRand(100, 1)
+	x1 := ng.AsVar(nt.NewRand(100, 1))
 	x1.Name = "x1"
-	y := ng.Add(ng.Add(ng.NewVar(5), ng.Mul(ng.NewVar(2), x)), x1)
+	y := ng.AsVar(nt.Add(nt.Add(nt.NewVar(5), nt.Mul(nt.NewVar(2), x.Data)), x1.Data))
 	y.Name = "y"
 	//a,_:=ep.Parse("5+2*x+x1")
 	//g:=a.Eval(ep.Env{"x":x,"x1":x1})
 	//ut.PrintDense("x",g.Data)
 	//ut.PrintDense("x",x.Data)
 	//ut.PrintDense("y",y.Data)
-	W := ng.NewVar(0)
+	W := ng.AsVar(nt.NewZeros(1, 1))
 	W.Name = "w"
-	b := ng.NewVar(0)
+	b := ng.AsVar(nt.NewZeros(1))
 	b.Name = "b"
 	predict := func(x *ng.Variable) *ng.Variable {
-		y := ng.Add(ng.Matmul(x, W), b)
-		return y
+		xw := ng.Matmul(x, W)
+		xwb := ng.Add(xw, b)
+		return xwb
 	}
 	mean_squared_error := func(x0, x1 *ng.Variable) *ng.Variable {
 		diff := ng.Sub(x0, x1)
-		rest := ng.Div(ng.Sum(ng.Mul(diff, diff)), ng.NewVar(float64(diff.Shape().R)))
+		mul := ng.Mul(diff, diff)
+		sum := ng.Sum(mul, false)
+		rest := ng.Div(sum, ng.NewVar(float64(diff.Data.Shape()[0])))
 		return rest
 	}
 	lr := ng.NewVar(0.1)
-	iters := 1000
+	iters := 100
 	for i := 0; i < iters; i++ {
 		yPred := predict(x)
 		loss := mean_squared_error(y, yPred)
@@ -55,10 +58,13 @@ func main() {
 		loss.Backward(false)
 
 		//更新参数不使用连接图，直接修改data
-		W.Data = nd.Sub(W.Data, nd.Mul(W.Grad.Data, lr.Data))
-		b.Data = nd.Sub(b.Data, nd.Mul(b.Grad.Data, lr.Data))
-		fmt.Println(i, loss.Sprint("loss"), W.Sprint("w"), b.Sprint("b"))
-		if loss.Var() < 0.1 {
+		W.Data = nt.Sub(W.Data, nt.Mul(W.Grad.Data, lr.Data))
+		b.Data = nt.Sub(b.Data, nt.Mul(b.Grad.Data, lr.Data))
+
+		fmt.Println(i)
+		fmt.Println(loss.Sprint("loss"), W.Sprint("w"), b.Sprint("b"))
+
+		if loss.Data.Var() < 0.1 {
 			break
 		}
 	}
@@ -69,13 +75,14 @@ func main() {
 	p.Y.Label.Text = "Y"
 	p.Add(plotter.NewGrid())
 
-	predPts := make(plotter.XYs, x.Shape().R)
-	pts := make(plotter.XYs, x.Shape().R)
-	for i := 0; i < x.Shape().R; i++ {
-		px := x.At(i, 0)
+	preY := predict(x)
+	predPts := make(plotter.XYs, x.Data.Shape()[0])
+	pts := make(plotter.XYs, x.Data.Shape()[0])
+	for i := 0; i < x.Data.Shape()[0]; i++ {
+		px := x.Data.Get(i, 0)
 		pts[i].X, predPts[i].X = px, px
-		pts[i].Y = y.At(i, 0)
-		predPts[i].Y = predict(ng.NewVar(px)).At(0, 0)
+		pts[i].Y = y.Data.Get(i, 0)
+		predPts[i].Y = preY.Data.Get(i, 0)
 	}
 	ptsList := []plotter.XYs{pts, predPts}
 

@@ -8,10 +8,11 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"gonum.org/v1/gonum/mat"
 	"test_ai/intset"
 	nt "test_ai/tensor"
 	ut "test_ai/utils"
+
+	"gonum.org/v1/gonum/mat"
 )
 
 func AsVar(v interface{}) *Variable {
@@ -23,7 +24,7 @@ func AsVar(v interface{}) *Variable {
 	case *Variable:
 		return v.(*Variable)
 	case int:
-		return NewVariable(nt.NewVar(v.(float64)))
+		return NewVariable(nt.NewVar(float64(v.(int))))
 	default:
 		logger.Printf("input type error")
 		return nil
@@ -69,22 +70,23 @@ func _where(x, y *Variable, cond condFunc) *Variable {
 //	return &Variable{Data:y}
 //}
 
-func _sumTo(x *Variable, s []int) *Variable {
-	y := AsVar(nt.NewZeros(s...))
-	if s[0] == 1 && s[1] == 1 {
-		y.Data = nt.NewVar(x.Data.Sum())
-	}
-	if s[0] == 1 && s[1] != 1 {
-		y.Data = x.Data.SumTo(0, true)
-	}
-	if s[1] == 1 && s[0] != 1 {
-		y.Data = x.Data.SumTo(1, true)
-	}
-	return y
-}
+////todo 目前只处理了2D，如果s是多维的，需要如何处理
+//func _sumTo(x *Variable, s []int) *Variable {
+//	y := AsVar(nt.NewZeros(s...))
+//	if s[0] == 1 && s[1] == 1 {
+//		y.Data = nt.NewVar(x.Data.Sum(true))
+//	}
+//	if s[0] == 1 && s[1] != 1 {
+//		y.Data = x.Data.Sum(true, 0)
+//	}
+//	if s[1] == 1 && s[0] != 1 {
+//		y.Data = x.Data.Sum(true, 1)
+//	}
+//	return y
+//}
 
 func _logsumexp(x *Variable, axis int) *Variable {
-	m := Max(x, axis)
+	m := Max(x, true, axis)
 	y := Sub(x, m)
 	y = Exp(y)
 	s := _sum(y, axis, true)
@@ -124,11 +126,11 @@ func _eyes(n int) *Variable {
 }
 
 func _sum(x *Variable, axis int, keepDims bool) *Variable {
-	y := x.Data.SumTo(axis, keepDims)
+	y := x.Data.Sum(keepDims, axis)
 	return &Variable{Data: y}
 }
 func _min(x *Variable, axis int, keepDims bool) *Variable {
-	y := x.Data.MinTo(axis, keepDims)
+	y := x.Data.Min(keepDims, axis)
 	return &Variable{Data: y}
 }
 
@@ -141,7 +143,7 @@ func _agrMax(x *Variable, axis int, keepDims bool) *Variable {
 	return &Variable{Data: y}
 }
 func _max(x *Variable, axis int, keepDims bool) *Variable {
-	y := x.Data.MaxTo(axis, keepDims)
+	y := x.Data.Max(keepDims, axis)
 	return &Variable{Data: y}
 }
 
@@ -200,49 +202,68 @@ func Cross(x, y *mat.Dense) *mat.Dense {
 	return m
 }
 
-func MeshGrid(x, y *Variable) (*Variable, *Variable) {
-	xs := x.Data.Shape()
-	ys := y.Data.Shape()
-	sp := []int{ys[1], xs[1]}
-	y = NewVariable(y.Data.T())
-	xm := _broadcastTo(x, sp)
-	ym := _broadcastTo(y, sp)
-	return xm, ym
-}
+//func MeshGrid(x, y *Variable) (*Variable, *Variable) {
+//	xs := x.Data.Shape()
+//	ys := y.Data.Shape()
+//	sp := []int{ys[1], xs[1]}
+//	y = NewVariable(y.Data.T())
+//	xm := _broadcastTo(x, sp)
+//	ym := _broadcastTo(y, sp)
+//	return xm, ym
+//}
 
-func _broadcastTo(x *Variable, s []int) *Variable {
-	y := x.Data.BroadcastTo(s)
-	return &Variable{Data: y}
-}
-func _checkBroadCast(x0s []int, x1s []int, x0 *Variable, x1 *Variable) (*Variable, *Variable) {
-	if !x0s.E(x1s) {
-		if x0s.B(x1s) {
-			x1 = BroadCastTo(x1, x0s...)
-		}
-		if x1s.B(x0s) {
-			x0 = BroadCastTo(x0, x1s...)
-		}
-	}
-	return x0, x1
-}
-func _checkSumToV(gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
-	x0s, x1s := gx0.Data.Shape(), gx1.Data.Shape()
-	x0, x1 := _checkSumTo(x0s, x1s, gx0, gx1)
-	return x0, x1
-}
-func _checkSumTo(x0s []int, x1s []int, gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
-	if !x0s.E(x1s) {
-		if x0s.B(x1s) { //x1 做过broadcast
-			gx1 = SumTo(gx1, x1s...)
-		}
-		if x1s.B(x0s) { //x0 做过broadcast
-			gx0 = SumTo(gx0, x0s...)
-		}
-	}
-	return gx0, gx1
-}
+//func _broadcastTo(x *Variable, s []int) *Variable {
+//	y := x.Data.BroadcastTo(s)
+//	return &Variable{Data: y}
+//}
+//func _checkBroadCast(x0s []int, x1s []int, x0 *Variable, x1 *Variable) (*Variable, *Variable) {
+//	if !x0s.E(x1s) {
+//		if x0s.B(x1s) {
+//			x1 = BroadCastTo(x1, x0s...)
+//		}
+//		if x1s.B(x0s) {
+//			x0 = BroadCastTo(x0, x1s...)
+//		}
+//	}
+//	return x0, x1
+//}
+
+//func _checkSumToV(gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
+//	x0s, x1s := gx0.Data.Shape(), gx1.Data.Shape()
+//	x0, x1 := _checkSumTo(x0s, x1s, gx0, gx1)
+//	return x0, x1
+//}
+//func _checkSumTo(x0s []int, x1s []int, gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
+//	if !x0s.E(x1s) {
+//		if x0s.B(x1s) { //x1 做过broadcast
+//			gx1 = sumTo(gx1, x1s...)
+//		}
+//		if x1s.B(x0s) { //x0 做过broadcast
+//			gx0 = sumTo(gx0, x0s...)
+//		}
+//	}
+//	return gx0, gx1
+//}
 
 func NumericalDiff(f func(i *Variable) *Variable, x *Variable) *Variable {
+	eps := 1e-6
+	x0 := AsVar(nt.Sub(x.Data, nt.NewVar(eps)))
+	x1 := AsVar(nt.Add(x.Data, nt.NewVar(eps)))
+	y0 := f(x0)
+	y1 := f(x1)
+	grad := nt.Div(nt.Sub(y1.Data, y0.Data), nt.NewVar(2*eps))
+	if !ut.IsEqInt(grad.Shape(), x.Data.Shape()) {
+		fmt.Printf("numerical grad:%v grad shape:%v x shape:%v\n", grad, grad.Shape(), x.Data.Shape())
+		if ut.IsGInt(grad.Shape(), x.Data.Shape()) {
+			grad = nt.SumTo(grad, x.Data.Shape())
+		} else {
+			// grad = nt.BroadcastTo(grad, x.Data.Shape()...)
+		}
+	}
+	return &Variable{Data: grad}
+}
+
+func NumericalDiffOld(f func(i *Variable) *Variable, x *Variable) *Variable {
 	eps := 1e-6
 	grad := nt.LikeZeros(x.Data)
 	xs := x.Data.Shape()
@@ -255,8 +276,8 @@ func NumericalDiff(f func(i *Variable) *Variable, x *Variable) *Variable {
 			x.Data.Set(tempV-eps, i, j)
 			y2 := f(x)
 			sub := Sub(y1, y2)
-			diff := Sum(sub)
-			diffV := diff.Data.Get(0, 0)
+			diff := Sum(sub, false)
+			diffV := diff.Data.Get(0)
 			g := diffV / (2.0 * eps)
 			//这里处理max，min的特殊情况，如果3-eps,但是y没有减小，因为max返回最大值了
 			if nt.DeepEqual(y1.Data, y3.Data, 1e-8) || nt.DeepEqual(y2.Data, y3.Data, 1e-8) {
@@ -336,9 +357,8 @@ func PlotDotGraph(v *Variable, verbose bool, file string) {
 	dotCmd, err := exec.LookPath("dot")
 	if err != nil {
 		logger.Printf("'dot' not found")
-	} else {
-		logger.Printf("'dot' is in '%s'\n", dotCmd)
 	}
+	logger.Printf("'dot' is in '%s'\n", dotCmd)
 	extType := filepath.Ext(file)[1:]
 	cmdStr := fmt.Sprintf("CMD: %s %s -T %s -o %s", dotCmd, tmpfile.Name(), extType, file)
 	logger.Printf(cmdStr)

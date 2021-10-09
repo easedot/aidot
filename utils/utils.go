@@ -376,6 +376,12 @@ func Reverse(arr []int) {
 	}
 }
 
+func PrependInt(x []float64, y float64) []float64 {
+	n := []float64{y}
+	n = append(n, x...)
+	return n
+}
+
 func Sum(input []float64) float64 {
 	sum := 0.0
 

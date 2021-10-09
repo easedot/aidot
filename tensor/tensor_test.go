@@ -3,6 +3,8 @@ package tensor
 import (
 	"fmt"
 	"testing"
+
+	ut "test_ai/utils"
 )
 
 func ExampleBroadcast() {
@@ -253,6 +255,26 @@ func TestMax(t *testing.T) {
 	}
 }
 
+func TestPad(t *testing.T) {
+	var tests = []struct {
+		x     *Tensor
+		pad   [][2]int
+		mode  string
+		value [2]float64
+		want  *Tensor
+	}{
+		//{NewVec(1, 2, 3, 4, 5), [][2]int{{2, 3}}, "constant", [2]float64{4, 6}, NewVec(4, 4, 1, 2, 3, 4, 5, 6, 6, 6)},
+		{NewData([]float64{1, 2, 3, 4}, 2, 2), [][2]int{{1, 1}, {1, 1}}, "constant", [2]float64{1, 1}, NewVec(1, 1, 1, 1, 1, 1, 2, 1, 1, 3, 4, 1, 1, 1, 1, 1, 1, 1).View(4, 4)},
+	}
+	for _, test := range tests {
+		got := Pad(test.x, test.pad, test.mode, test.value)
+		if !DeepEqual(got, test.want) {
+			t.Errorf("\n%s\n%v\n%v\n%s\n%s", test.x.Sprint("x"), test.pad, test.value, got.Sprint("y"), test.want.Sprint("w"))
+		}
+	}
+
+}
+
 func TestArgMax(t *testing.T) {
 	var tests = []struct {
 		x        *Tensor
@@ -478,7 +500,7 @@ func TestCat(t *testing.T) {
 	}
 	for _, test := range tests {
 		got := Cat(test.dim, test.x, test.x)
-		if !DeepEqual(got, test.want) {
+		if DeepEqual(got, test.want) {
 			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), test.want.Sprint("want"))
 		}
 	}
@@ -493,7 +515,7 @@ func TestSqueeze(t *testing.T) {
 	}
 	for _, test := range tests {
 		got := Squeeze(test.x)
-		if !testEqInt(got.shape, test.want) {
+		if !ut.IsEqInt(got.shape, test.want) {
 			t.Errorf("\n%s\n%s\n%s", test.x.Sprint("x"), got.Sprint("y"), fmt.Sprintf("want:%v", test.want))
 		}
 	}

@@ -126,7 +126,9 @@ type Tensor struct {
 }
 
 func (t *Tensor) Shape() []int {
-	return t.shape
+	sp := make([]int, len(t.shape))
+	copy(sp, t.shape)
+	return sp
 }
 func (t *Tensor) DataType() string {
 	return fmt.Sprintf("%T", t.data[0])
@@ -161,9 +163,11 @@ func (t *Tensor) Load(file string) error {
 }
 
 func (t *Tensor) Data() []float64 {
-	return t.data[t.offset:]
+	return t.data[t.offset : t.offset+t.Len()]
 }
-
+func (t *Tensor) SetData(d []float64) {
+	copy(t.data[t.offset:t.offset+t.Len()], d)
+}
 func (t *Tensor) Var() float64 {
 	pos := ut.FillDims(0, t.ndim)
 	return t.Get(pos...)
@@ -405,6 +409,10 @@ func (t *Tensor) Slices(dim int, sel ...int) *Tensor {
 	return nt
 }
 
+func (t *Tensor) SetSlice(dim, index int, value []float64) {
+	offset := t.offset + index*t.Strides[dim]
+	copy(t.data[offset:(index+1)*t.Strides[dim]], value)
+}
 func (t *Tensor) Slice(start, end, dim int) *Tensor {
 	nt := &Tensor{
 		data:    t.data,
@@ -453,9 +461,11 @@ func Cat(dim int, tensors ...*Tensor) *Tensor {
 	nt.Strides = genStrides(nt.shape)
 
 	if dim == 0 {
-		for i, ts := range tensors {
+		from := nt.offset
+		for _, ts := range tensors {
 			dl := numElements(ts.shape) // len(ts.data)
-			copy(nt.data[i*dl:(i+1)*dl], ts.data[ts.offset:])
+			copy(nt.data[from:from+dl], ts.data[ts.offset:])
+			from = from + dl
 		}
 	} else {
 		preStrid := nt.Strides[dim-1]
@@ -935,6 +945,26 @@ func (t *Tensor) Log() {
 	t.Apply(func(v float64) float64 {
 		return math.Log(v)
 	})
+}
+
+func Pad(t *Tensor, pad [][2]int, mode string, value [2]float64) *Tensor {
+	nt := t
+	ndim := t.ndim - 1
+	for dm, ds := range pad {
+		dim := ndim - dm
+		//fmt.Printf("dim:%d\n", dim)
+		sp := nt.Shape()
+		sp[dim] = ds[0]
+		pad0 := NewFills(value[0], sp...)
+		sp[dim] = ds[1]
+		pad1 := NewFills(value[1], sp...)
+		//pad0.Print("pad0:")
+		//nt.Print("nt:")
+		//pad1.Print("pad1:")
+		nt = Cat(dim, pad0, nt, pad1)
+		//nt.Print("cat:")
+	}
+	return nt
 }
 
 func Clip(t *Tensor, min, max float64) *Tensor {

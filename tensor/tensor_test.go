@@ -269,7 +269,7 @@ func TestPad(t *testing.T) {
 	for _, test := range tests {
 		got := Pad(test.x, test.pad, test.mode, test.value)
 		if !DeepEqual(got, test.want) {
-			t.Errorf("\n%s\n%v\n%v\n%s\n%s", test.x.Sprint("x"), test.pad, test.value, got.Sprint("y"), test.want.Sprint("w"))
+			t.Errorf("\n%s\npad:%v\nvalue:%v\n%s\n%s", test.x.Sprint("x"), test.pad, test.value, got.Sprint("y"), test.want.Sprint("w"))
 		}
 	}
 

@@ -2,7 +2,6 @@ package numgo
 
 import (
 	"fmt"
-	"io/ioutil"
 	logger "log"
 	"os"
 	"os/exec"
@@ -34,7 +33,7 @@ func AsVar(v interface{}) *Variable {
 type condFunc func(x, y *Variable, r, c int)
 
 func _where(x, y *Variable, cond condFunc) *Variable {
-	shape := x.Data.Shape()
+	shape := x.Shape()
 	for i := 0; i < shape[0]; i++ {
 		for j := 0; j < shape[1]; j++ {
 			cond(x, y, i, j)
@@ -96,7 +95,7 @@ func _logsumexp(x *Variable, axis int) *Variable {
 }
 
 func _maxBackwardShape(x *Variable, axis interface{}) []int {
-	n := x.Data.Shape()
+	n := x.Shape()
 	is := intset.IntSet{}
 	if axis == nil {
 		r := ut.ArangeInt(0, 2, 1)
@@ -203,8 +202,8 @@ func Cross(x, y *mat.Dense) *mat.Dense {
 }
 
 //func MeshGrid(x, y *Variable) (*Variable, *Variable) {
-//	xs := x.Data.Shape()
-//	ys := y.Data.Shape()
+//	xs := x.Shape()
+//	ys := y.Shape()
 //	sp := []int{ys[1], xs[1]}
 //	y = NewVariable(y.Data.T())
 //	xm := _broadcastTo(x, sp)
@@ -229,7 +228,7 @@ func Cross(x, y *mat.Dense) *mat.Dense {
 //}
 
 //func _checkSumToV(gx0 *Variable, gx1 *Variable) (*Variable, *Variable) {
-//	x0s, x1s := gx0.Data.Shape(), gx1.Data.Shape()
+//	x0s, x1s := gx0.Shape(), gx1.Shape()
 //	x0, x1 := _checkSumTo(x0s, x1s, gx0, gx1)
 //	return x0, x1
 //}
@@ -252,12 +251,12 @@ func NumericalDiff(f func(i *Variable) *Variable, x *Variable) *Variable {
 	y0 := f(x0)
 	y1 := f(x1)
 	grad := nt.Div(nt.Sub(y1.Data, y0.Data), nt.NewVar(2*eps))
-	if !ut.IsEqInt(grad.Shape(), x.Data.Shape()) {
-		fmt.Printf("numerical grad:%v grad shape:%v x shape:%v\n", grad, grad.Shape(), x.Data.Shape())
-		if ut.IsGInt(grad.Shape(), x.Data.Shape()) {
-			grad = nt.SumTo(grad, x.Data.Shape())
+	if !ut.IsEqInt(grad.Shape(), x.Shape()) {
+		fmt.Printf("numerical grad:%v grad shape:%v x shape:%v\n", grad, grad.Shape(), x.Shape())
+		if ut.IsGInt(grad.Shape(), x.Shape()) {
+			grad = nt.SumTo(grad, x.Shape())
 		} else {
-			// grad = nt.BroadcastTo(grad, x.Data.Shape()...)
+			// grad = nt.BroadcastTo(grad, x.Shape()...)
 		}
 	}
 	return &Variable{Data: grad}
@@ -266,7 +265,7 @@ func NumericalDiff(f func(i *Variable) *Variable, x *Variable) *Variable {
 func NumericalDiffOld(f func(i *Variable) *Variable, x *Variable) *Variable {
 	eps := 1e-6
 	grad := nt.LikeZeros(x.Data)
-	xs := x.Data.Shape()
+	xs := x.Shape()
 	for i := 0; i < xs[0]; i++ {
 		for j := 0; j < xs[1]; j++ {
 			tempV := x.Data.Get(i, j)
@@ -298,7 +297,7 @@ func dotVar(v *Variable, verbose bool) string {
 		if name != "" {
 			name += ":"
 		}
-		name = fmt.Sprintf("%s %v %s", name, v.Data.Shape(), v.Data.DataType())
+		name = fmt.Sprintf("%s %v %s", name, v.Shape(), v.Data.DataType())
 	}
 	dotVar := fmt.Sprintf(" \"%p\" [label=\"%s\", color=orange,style=filled]\n", v, name)
 	return dotVar
@@ -340,7 +339,7 @@ func getDotGraph(v *Variable, verbose bool) string {
 
 func PlotDotGraph(v *Variable, verbose bool, file string) {
 	content := getDotGraph(v, verbose)
-	tmpfile, err := ioutil.TempFile("", "tmp_graph.dot")
+	tmpfile, err := os.CreateTemp("", "tmp_graph.dot")
 	if err != nil {
 		logger.Fatal(err)
 	}

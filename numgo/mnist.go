@@ -313,7 +313,7 @@ func PrintImageF(image []float64, tt int) {
 //	)
 //	pls = append(pls, c)
 //	p := plot.New()
-//	p.Title.Text = "Plotutil example"
+//	p.Title.Text = "Plotutil examples"
 //	p.X.Label.Text = "X"
 //	p.Y.Label.Text = "Y"
 //	p.Add(plotter.NewGrid())
@@ -346,7 +346,7 @@ func PrintS(image []float64, tt int) {
 	}
 	pls = append(pls, s)
 	p := plot.New()
-	p.Title.Text = "Plotutil example"
+	p.Title.Text = "Plotutil examples"
 	p.X.Label.Text = "X"
 	p.Y.Label.Text = "Y"
 	p.Add(plotter.NewGrid())

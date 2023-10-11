@@ -61,15 +61,15 @@ func main() {
 	}
 
 	p := plot.New()
-	p.Title.Text = "Plotutil example"
+	p.Title.Text = "Plotutil examples"
 	p.X.Label.Text = "X"
 	p.Y.Label.Text = "Y"
 	p.Add(plotter.NewGrid())
 
 	preY := predict(x)
-	predPts := make(plotter.XYs, x.Data.Shape()[0])
-	pts := make(plotter.XYs, x.Data.Shape()[0])
-	for i := 0; i < x.Data.Shape()[0]; i++ {
+	predPts := make(plotter.XYs, x.Shape()[0])
+	pts := make(plotter.XYs, x.Shape()[0])
+	for i := 0; i < x.Shape()[0]; i++ {
 		px := x.Data.Get(i, 0)
 		pts[i].X, predPts[i].X = px, px
 		pts[i].Y = y.Data.Get(i, 0)

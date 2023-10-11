@@ -137,6 +137,9 @@ func (t *Tensor) Dims() int {
 	return len(t.shape)
 }
 
+func (t *Tensor) Size() int {
+	return t.Len()
+}
 func (t *Tensor) Len() int {
 	return numElements(t.shape)
 }
@@ -242,7 +245,7 @@ func BroadcastTo(t *Tensor, shape ...int) *Tensor {
 	return nt
 }
 
-//todo 这里要保证shape小于t的shape，因为都是基于t来做处理的
+// todo 这里要保证shape小于t的shape，因为都是基于t来做处理的
 func SumTo(t *Tensor, shape []int) *Tensor {
 	ndim := len(shape)
 	lead := t.ndim - ndim
@@ -631,7 +634,7 @@ func (t *Tensor) DeepCopy(from *Tensor) {
 	copy(t.data, from.data)
 }
 
-//Add func
+// Add func
 func Add(t1, t2 *Tensor) *Tensor {
 	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		return v + ov
@@ -639,7 +642,7 @@ func Add(t1, t2 *Tensor) *Tensor {
 	return nt
 }
 
-//Sub func
+// Sub func
 func Sub(t1, t2 *Tensor) *Tensor {
 	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		return v - ov
@@ -647,7 +650,7 @@ func Sub(t1, t2 *Tensor) *Tensor {
 	return nt
 }
 
-//Mul func
+// Mul func
 func Mul(t1, t2 *Tensor) *Tensor {
 	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		return v * ov
@@ -655,14 +658,14 @@ func Mul(t1, t2 *Tensor) *Tensor {
 	return nt
 }
 
-//Dot func
+// Dot func
 func Dot(t1, t2 *Tensor) *Tensor {
 	dim := 0
 	if t1.ndim == 1 && t2.ndim == 1 { //for 1D vector
 		return Sum(Mul(t1, t2), false)
 	}
 	if t1.shape[1] != t2.shape[0] {
-		panic(fmt.Errorf("dot a rows must equal b cols t1:%v t2:%v", t1, t2))
+		panic(fmt.Errorf("Dot func from shape[1]  must equal to shape[0]  from:%v to:%v\n", t1.Shape(), t2.Shape()))
 	}
 	t1r, t2c := t1.shape[0], t2.shape[1]
 	nt := NewZeros(t1r, t2c)
@@ -675,7 +678,7 @@ func Dot(t1, t2 *Tensor) *Tensor {
 	return nt
 }
 
-//Div func
+// Div func
 func Div(t1, t2 *Tensor) *Tensor {
 	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		return v / ov
@@ -683,7 +686,7 @@ func Div(t1, t2 *Tensor) *Tensor {
 	return nt
 }
 
-//Max func
+// Max func
 func Maximum(t1, t2 *Tensor) *Tensor {
 	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		if v < ov {
@@ -704,7 +707,7 @@ func Maximum(t1, t2 *Tensor) *Tensor {
 //	})
 //}
 
-//Min func
+// Min func
 func Minimum(t1, t2 *Tensor) *Tensor {
 	nt := ApplyBroadcast(t1, t2, func(idx int, v, ov float64) float64 {
 		if v > ov {
@@ -725,7 +728,7 @@ func Minimum(t1, t2 *Tensor) *Tensor {
 //	})
 //}
 
-//---
+// ---
 func Sum(t *Tensor, keepDim bool, axis ...int) *Tensor {
 	//nt := t.DeepClone()
 	return t.Sum(keepDim, axis...)
@@ -994,8 +997,8 @@ func MeshGrid(x, y *Tensor) (*Tensor, *Tensor) {
 	return xm, ym
 }
 
-//x axis and y axis cross pts grid
-//x is 1,c and y is 1,c
+// x axis and y axis cross pts grid
+// x is 1,c and y is 1,c
 func Cross(x, y *Tensor) *Tensor {
 	xr, xc := x.Shape()[0], x.Shape()[1]
 	t := NewZeros(xr*xc, 2)
@@ -1091,7 +1094,7 @@ func (t *Tensor) ApplyDim(dim int, keepDim bool, fn func(idx int, dimT *Tensor))
 
 //---tools
 
-//argMax todo for cuda
+// argMax todo for cuda
 func argMax(t, ot, idt *Tensor, idm int) *Tensor {
 	nt := ApplyBroadcast(t, ot, func(idx int, v, ov float64) float64 {
 		if v < ov {

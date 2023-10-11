@@ -85,35 +85,36 @@ type reshapeFunc struct {
 
 func (s *reshapeFunc) forward(ix []*Variable) []*Variable {
 	x := ix[0]
-	s.Xs = x.Data.Shape()
-	return []*Variable{{Data: x.Data.Reshape(s.S...)}}
+	s.Xs = x.Shape()
+	y := x.Data.Reshape(s.S...)
+	return []*Variable{NewVariable(y)}
 }
 func (s *reshapeFunc) backward(_, _, gy []*Variable) []*Variable {
 	return []*Variable{Reshape(gy[0], s.Xs...)}
 }
 
-func Transpose(x *Variable, axis []int) *Variable {
-	f := NewFunction(&transposeFunc{axis: axis})
+func Permute(x *Variable, axis ...int) *Variable {
+	f := NewFunction(&permuteFunc{axis: axis})
 	y := f.Run(x)
 	return y
 }
 
-type transposeFunc struct {
+type permuteFunc struct {
 	Function
 	axis []int
 }
 
-func (t *transposeFunc) forward(ix []*Variable) []*Variable {
+func (t *permuteFunc) forward(ix []*Variable) []*Variable {
 	x := ix[0]
 	y := x.Data.Permute(t.axis...)
 	return []*Variable{{Data: y}}
 }
-func (t *transposeFunc) backward(_, _, gy []*Variable) []*Variable {
+func (t *permuteFunc) backward(_, _, gy []*Variable) []*Variable {
 	y := gy[0]
 	rs := make([]int, len(t.axis))
 	copy(rs, t.axis)
 	ut.Reverse(rs)
-	return []*Variable{Transpose(y, rs)}
+	return []*Variable{Permute(y, rs...)}
 }
 
 func Exp(x ...*Variable) *Variable {
@@ -151,7 +152,7 @@ type sumFunc struct {
 
 func (s *sumFunc) forward(ix []*Variable) []*Variable {
 	x := ix[0]
-	s.Xs = x.Data.Shape()
+	s.Xs = x.Shape()
 	y := x.Data.Sum(s.keepDim, s.axis...)
 	return []*Variable{{Data: y}}
 }
@@ -174,7 +175,7 @@ type sumToFunc struct {
 
 func (s *sumToFunc) forward(ix []*Variable) []*Variable {
 	x := ix[0]
-	s.Xs = x.Data.Shape()
+	s.Xs = x.Shape()
 	y := nt.SumTo(x.Data, s.S)
 	return []*Variable{{Data: y}}
 }
@@ -197,7 +198,7 @@ type broadcastToFunc struct {
 }
 
 func (s *broadcastToFunc) forward(ix []*Variable) []*Variable {
-	s.Xs = ix[0].Data.Shape()
+	s.Xs = ix[0].Shape()
 	y := nt.BroadcastTo(ix[0].Data, s.S...)
 	return []*Variable{{Data: y}}
 }
@@ -258,7 +259,7 @@ func (l *linearFunc) backward(is, os, gys []*Variable) []*Variable {
 	}
 	gb := &Variable{}
 	if b != nil {
-		gb = SumTo(gy, b.Data.Shape()...)
+		gb = SumTo(gy, b.Shape()...)
 	}
 	gx := Matmul(gy, AsVar(W.Data.T()))
 	gW := Matmul(AsVar(x.Data.T()), gy)
@@ -313,7 +314,7 @@ func (m *meanSquaredError) backward(is, os, gys []*Variable) []*Variable {
 	gy := gys[0]
 	x0, x1 := is[0], is[1]
 	diff := Sub(x0, x1)
-	gx0 := Mul(Mul(gy, diff), Div(2, diff.Data.Shape()[0]))
+	gx0 := Mul(Mul(gy, diff), Div(2, diff.Shape()[0]))
 	gx1 := Neg(gx0)
 	return []*Variable{gx0, gx1}
 }
@@ -330,7 +331,7 @@ func Softmax1d(x *Variable) *Variable {
 }
 
 func Softmax_cross_entropy_simple(x *Variable, t []int) float64 {
-	N := x.Data.Shape()[0]
+	N := x.Shape()[0]
 	p := Softmax1d(x)
 	p = Clip(p, 1e-15, 1.0)
 	p = Log(p)
@@ -357,7 +358,7 @@ func Accuracy(y interface{}, t []float64) *Variable {
 func Dropout(xi interface{}, dropRatio float64) *Variable {
 	x := AsVar(xi)
 	if Backprop { //for train
-		randD := nt.NewRand(x.Data.Shape()...)
+		randD := nt.NewRand(x.Shape()...)
 		mask := nt.ApplyPos(randD, func(pos []int, v float64) float64 {
 			if v > dropRatio {
 				return 1
@@ -388,7 +389,7 @@ type softmaxCrossEntropy struct {
 
 func (s *softmaxCrossEntropy) forward(is []*Variable) []*Variable {
 	x := is[0]
-	N := x.Data.Shape()[0]
+	N := x.Shape()[0]
 	logZ := _logsumexp(x, 1)
 	logP := nt.Sub(x.Data, logZ.Data)                          //Sub(x,logZ)
 	logP = logP.SliceSel(0, false, ut.ArangeInt(0, N, 1), s.t) // SelRowCol(logP.Data,s.t...) //Getitem(logP,ut.ArangeInt(0,N,1),s.t)
@@ -399,7 +400,7 @@ func (s *softmaxCrossEntropy) forward(is []*Variable) []*Variable {
 func (s *softmaxCrossEntropy) backward(is, os, gys []*Variable) []*Variable {
 	gy := gys[0]
 	x := is[0]
-	xs := x.Data.Shape()
+	xs := x.Shape()
 	N, ClsNum := xs[0], xs[1]
 	gy = Mul(gy, 1.0/float64(N))
 	y := Softmax(x, 1)
@@ -585,7 +586,7 @@ func (s *maxFunc) backward(is, os, gys []*Variable) []*Variable {
 	shape := _maxBackwardShape(x, s.axis)
 	gy = Reshape(gy, shape...)
 	y = Reshape(y, shape...)
-	//y = _broadcastTo(y, x.Data.Shape())
+	//y = _broadcastTo(y, x.Shape())
 	//mask := _where(x, y, eq)
 	////gy=_broadcastTo(gy,mask.Shape())
 	mask := nt.ApplyBroadcast(x.Data, y.Data, func(idx int, v, ov float64) float64 {
@@ -623,7 +624,7 @@ func (s *minFunc) backward(is, os, gys []*Variable) []*Variable {
 	shape := _maxBackwardShape(x, s.axis)
 	gy = Reshape(gy, shape...)
 	y = Reshape(y, shape...)
-	//y = _broadcastTo(y, x.Data.Shape())
+	//y = _broadcastTo(y, x.Shape())
 	//mask := _where(x, y, eq)
 	//gy=_broadcastTo(gy,mask.Shape())
 	mask := nt.ApplyBroadcast(x.Data, y.Data, func(idx int, v, ov float64) float64 {

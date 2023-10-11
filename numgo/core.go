@@ -27,18 +27,20 @@ var Backprop = true
 //	return NewMat(r,c,d...)
 //}
 
-//func NewRand(r, c int) *Variable {
-//	s := ut.Rand(r, c)
-//	return NewMat(r, c, s...)
-//}
-//func NewRandN(r, c int) *Variable {
-//	s := ut.RandN(r, c)
-//	return NewMat(r, c, s...)
-//}
-//func NewRandE(r, c int) *Variable {
-//	s := ut.RandE(r, c)
-//	return NewMat(r, c, s...)
-//}
+//	func NewRand(r, c int) *Variable {
+//		s := ut.Rand(r, c)
+//		return NewMat(r, c, s...)
+//	}
+//
+//	func NewRandN(r, c int) *Variable {
+//		s := ut.RandN(r, c)
+//		return NewMat(r, c, s...)
+//	}
+//
+//	func NewRandE(r, c int) *Variable {
+//		s := ut.RandE(r, c)
+//		return NewMat(r, c, s...)
+//	}
 func NewVar(d float64) *Variable {
 	dv := nt.NewVar(d)
 	return &Variable{Data: dv}
@@ -48,10 +50,10 @@ func NewVec(d ...float64) *Variable {
 	return &Variable{Data: dv}
 }
 
-//func NewVecInt(d ...int) *Variable {
-//	dv := nd.NewVecInt(d...)
-//	return &Variable{Data: dv}
-//}
+//	func NewVecInt(d ...int) *Variable {
+//		dv := nd.NewVecInt(d...)
+//		return &Variable{Data: dv}
+//	}
 func NewMat(d []float64, pos ...int) *Variable {
 	dv := nt.NewData(d, pos...)
 	return &Variable{Data: dv}
@@ -82,13 +84,26 @@ type Variable struct {
 func (v *Variable) Plot(verbose bool, file string) {
 	PlotDotGraph(v, verbose, file)
 }
-func (v *Variable) ReShape(r, c int) *Variable {
-	return Reshape(v, r, c)
+
+func (v *Variable) Shape() []int {
+	return v.Data.Shape()
 }
 
-//func (v *Variable) Transpose() *Variable {
-//	return Transpose(v)
-//}
+func (v *Variable) Reshape(s ...int) *Variable {
+	return Reshape(v, s...)
+}
+
+func (v *Variable) Permute(axis ...int) *Variable {
+	return Permute(v, axis...)
+}
+
+func (v *Variable) Transpose(dim0, dim1 int) *Variable {
+	if dim0 == dim1 {
+		panic("Transpose must exchange diff dim")
+	}
+	return Permute(v, dim1, dim0)
+}
+
 func (v *Variable) ClearGrade() {
 	v.Grad = nil
 }
@@ -223,7 +238,10 @@ func (f *Function) Run(ix ...*Variable) *Variable {
 	return outputs[0]
 }
 func (f *Function) Back(ig ...*Variable) []*Variable {
-	//todo 这里和书中不同，特殊考虑一下，要研究对错，加法在反向传播时如果没有广播，则原封不的传递上游的Grade 而一开始Grade没有Creator，会造成传递的远端的计算图没有creator，plot后只有一个变量
+	//todo 这里和书中不同，特殊考虑一下，要研究对错，加法在反向传播时如果没有广播，
+	// 则原封不的传递上游的Grade 而一开始Grade没有Creator，
+	// 会造成传递的远端的计算图没有creator，plot后只有一个变量
+
 	//for _,g :=range ig{
 	//	if g.Creator==nil{
 	//		g.SetCreator(f)
@@ -233,7 +251,7 @@ func (f *Function) Back(ig ...*Variable) []*Variable {
 	return b
 }
 
-//Pow Variable
+// Pow Variable
 func Pow(x *Variable, c int) *Variable {
 	f := NewFunction(&powFunc{C: c})
 	return f.Run(x)
@@ -257,7 +275,7 @@ func (s *powFunc) backward(i, o, gy []*Variable) []*Variable {
 	return []*Variable{gx}
 }
 
-//Neg Variable
+// Neg Variable
 func Neg(x interface{}) *Variable {
 	f := NewFunction(&negFunc{})
 	return f.Run(AsVar(x))
@@ -278,7 +296,7 @@ func (e *negFunc) backward(i, o, gy []*Variable) []*Variable {
 	return []*Variable{ngy}
 }
 
-//Add Variable
+// Add Variable
 func Add(x0, x1 interface{}) *Variable {
 	f := NewFunction(&addFunc{})
 	y := f.Run(AsVar(x0), AsVar(x1))
@@ -292,22 +310,22 @@ type addFunc struct {
 
 func (a *addFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
-	a.x0s, a.x1s = x0.Data.Shape(), x1.Data.Shape()
+	a.x0s, a.x1s = x0.Shape(), x1.Shape()
 	o := nt.Add(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
 func (a *addFunc) backward(i, o, gy []*Variable) []*Variable {
 	gx0, gx1 := gy[0], gy[0]
-	if !ut.IsEqInt(gx0.Data.Shape(), a.x0s) {
+	if !ut.IsEqInt(gx0.Shape(), a.x0s) {
 		gx0 = SumTo(gx0, a.x0s...)
 	}
-	if !ut.IsEqInt(gx1.Data.Shape(), a.x1s) {
+	if !ut.IsEqInt(gx1.Shape(), a.x1s) {
 		gx1 = SumTo(gx1, a.x1s...)
 	}
 	return []*Variable{gx0, gx1}
 }
 
-//Sub Variable
+// Sub Variable
 func Sub(x0, x1 interface{}) *Variable {
 	f := NewFunction(&subFunc{})
 	y := f.Run(AsVar(x0), AsVar(x1))
@@ -321,23 +339,23 @@ type subFunc struct {
 
 func (a *subFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
-	a.x0s, a.x1s = x0.Data.Shape(), x1.Data.Shape()
+	a.x0s, a.x1s = x0.Shape(), x1.Shape()
 	o := nt.Sub(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
 func (a *subFunc) backward(i, o, gy []*Variable) []*Variable {
 	g := gy[0]
 	gx0, gx1 := g, Neg(g)
-	if !ut.IsEqInt(gx0.Data.Shape(), a.x0s) {
+	if !ut.IsEqInt(gx0.Shape(), a.x0s) {
 		gx0 = SumTo(gx0, a.x0s...)
 	}
-	if !ut.IsEqInt(gx1.Data.Shape(), a.x1s) {
+	if !ut.IsEqInt(gx1.Shape(), a.x1s) {
 		gx1 = SumTo(gx1, a.x1s...)
 	}
 	return []*Variable{gx0, gx1}
 }
 
-//Mul Variable
+// Mul Variable
 func Mul(x0, x1 interface{}) *Variable {
 	f := NewFunction(&mulFunc{})
 	y := f.Run(AsVar(x0), AsVar(x1))
@@ -351,7 +369,7 @@ type mulFunc struct {
 
 func (m *mulFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
-	m.x0s, m.x1s = x0.Data.Shape(), x1.Data.Shape()
+	m.x0s, m.x1s = x0.Shape(), x1.Shape()
 	o := nt.Mul(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
 }
@@ -360,16 +378,16 @@ func (m *mulFunc) backward(i, o, gy []*Variable) []*Variable {
 	x0, x1 := i[0], i[1]
 	gx0 := Mul(x1, g)
 	gx1 := Mul(x0, g)
-	if !ut.IsEqInt(gx0.Data.Shape(), m.x0s) {
+	if !ut.IsEqInt(gx0.Shape(), m.x0s) {
 		gx0 = SumTo(gx0, m.x0s...)
 	}
-	if !ut.IsEqInt(gx1.Data.Shape(), m.x1s) {
+	if !ut.IsEqInt(gx1.Shape(), m.x1s) {
 		gx1 = SumTo(gx1, m.x1s...)
 	}
 	return []*Variable{gx0, gx1}
 }
 
-//Div Variable
+// Div Variable
 func Div(x0, x1 interface{}) *Variable {
 	f := NewFunction(&divFunc{})
 	y := f.Run(AsVar(x0), AsVar(x1))
@@ -383,7 +401,7 @@ type divFunc struct {
 
 func (d *divFunc) forward(ix []*Variable) []*Variable {
 	x0, x1 := ix[0], ix[1]
-	d.x0s, d.x1s = x0.Data.Shape(), x1.Data.Shape()
+	d.x0s, d.x1s = x0.Shape(), x1.Shape()
 
 	o := nt.Div(x0.Data, x1.Data)
 	return []*Variable{{Data: o}}
@@ -393,10 +411,10 @@ func (d *divFunc) backward(i, o, gy []*Variable) []*Variable {
 	x0, x1 := i[0], i[1]
 	gx0 := Div(g, x1)
 	gx1 := Mul(g, Div(Neg(x0), Mul(x1, x1)))
-	if !ut.IsEqInt(gx0.Data.Shape(), d.x0s) {
+	if !ut.IsEqInt(gx0.Shape(), d.x0s) {
 		gx0 = SumTo(gx0, d.x0s...)
 	}
-	if !ut.IsEqInt(gx1.Data.Shape(), d.x1s) {
+	if !ut.IsEqInt(gx1.Shape(), d.x1s) {
 		gx1 = SumTo(gx1, d.x1s...)
 	}
 	return []*Variable{gx0, gx1}

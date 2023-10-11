@@ -86,7 +86,7 @@ func (l *linearLayer) setParams(p map[string]*Variable) {
 }
 func (l *linearLayer) forward(x *Variable) *Variable {
 	if l.W.Data == nil {
-		l.I = x.Data.Shape()[1]
+		l.I = x.Shape()[1]
 		l.initW()
 	}
 	y := Linear(x, l.W, l.b)

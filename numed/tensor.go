@@ -4,7 +4,7 @@ package numed
 //import (
 //	"fmt"
 //
-//	ut "test_ai/utils"
+//	ut "aidot/utils"
 //)
 //
 //func NewArangeTensor(start, stop, step float64) *Tensor {

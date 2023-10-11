@@ -71,7 +71,7 @@ func main() {
 	ug := ng.UnitGrid{xx, yy, zz}
 
 	p := plot.New()
-	p.Title.Text = "Plotutil example"
+	p.Title.Text = "Plotutil examples"
 	p.X.Label.Text = "X"
 	p.Y.Label.Text = "Y"
 	p.Add(plotter.NewGrid())

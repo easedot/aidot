@@ -35,7 +35,8 @@ Examples
 
 Todo
 ---------------
-Cuda support
+CNN Support
+Cuda Support
 
 License
 -----------------

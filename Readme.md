@@ -1,6 +1,6 @@
 Ai dot
 ==============
-Simple, efficient AI framework for Go.
+Simple AI framework for Go.
 
 Requirements
 -----------------
@@ -27,10 +27,10 @@ Examples
     model graph
 ![Web UI](https://github.com/easedot/aidot/blob/master/assets/model.png)
 
-    example graph
+    example_44.go graph
 ![Web UI](https://github.com/easedot/aidot/blob/master/assets/points.png)
 
-    example graph
+    example_50.go graph
 ![Web UI](https://github.com/easedot/aidot/blob/master/assets/points_spiral.png)
 
 Todo
